@@ -1,0 +1,37 @@
+Since I didnt do well in 2021 due to time and some genetic AI issues I figured I will up my game this year. 
+
+My goal for the first event was to build the perfect bot using Heuristics. 
+Heuristics is best for a problem like this because you can put a number on every node. 
+
+My number was "Res Gained per turn"
+
+With this I played around with a few different strategies untill i found the following sequence:
+
+A) Handle Upkeep
+B) Gather my needs for growth factoring resource priority x population (3 times)
+C) Try and Gather Max Resources for storage
+
+The optimizations here were to get gathering as efficient as possible. 
+
+Once I was efficient enough I had extra units. I used them to cycle wood into heat. I calculated the perfect population for a 2500 round match, and used any extra units to stockpile heat towards a goal. 
+
+The last step after stockpiling heat was gathering resources for tier advancements in advance,
+
+Calculating at what tick the population advancement will be so that I can start stockpiling as early as possible. 
+
+
+At this stage there was only one scenario bothering me. 
+As far as numbers this bot is 99% perfect except for one possible scenario that I have yet to test. 
+Can I send units to a node the same turn they would finish.
+
+
+I need to test these cases. 
+A) Can I send units the same turn they return
+B) Can I interact with a node the same turn the units would finish.
+
+Regardless of this feature.
+By bot is already capable of maxing out its population and storages against my version that does not stockpile heat. 
+
+
+I will test this a bit later. by looking at when units will return and seeing if I can send it out again same turn as its return. 
+

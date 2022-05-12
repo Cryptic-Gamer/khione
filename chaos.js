@@ -52,6 +52,8 @@ var mf, mw, mo, mh; //Food, Wood, Stone, heat
 var nf, nw, ns, nh; //Need Food, Wood, Stone, Heat
 var wf, ww, ws, wh; //Worker food, wood, stone, heat
 var tf, tw, ts; //total res harvested to rebalance the max storage
+var woodsup;
+var starve=false;
 
 var lv=0.16; //Livetime value of a unit (Absolutely no usecase in V1.5 but could be essential later on.)
 
@@ -66,6 +68,7 @@ var sct=0;//Scout
 var cf=[0,0,0,0,0,0,0],cw=[0,0,0,0,0,0,0],cs=[0,0,0,0,0,0,0];
 var cycle=0, ncycle;
 var minr,maxr;
+
 
 connection.on("ReceiveBotState", gameState => {
    	
@@ -164,11 +167,16 @@ connection.on("ReceiveBotState", gameState => {
 			}
 	}
 	
+	if(wn.length>0){
+	   woodsup=0;
+	   }
+	
 	console.log("Resource Nodes available:"+mrn);
 	for(i = w.map.nodes.length-1; i>=0; i--){
 						tn=w.map.nodes[i];
 						if(tn.type==1){
 							for(j=wn.length-1;j>=0;j--){if(wn[j][0]==tn.id){wn[j][3]=tn.maxUnits-tn.currentUnits;wn[j][5]=tn.amount-(tn.currentUnits*tn.reward);wn[j][8]=tn.currentUnits;}}
+							woodsup=woodsup+tn.amount;
 						} else if(tn.type==2){
 							for(j=fn.length-1;j>=0;j--){if(fn[j][0]==tn.id){fn[j][3]=tn.maxUnits-tn.currentUnits;fn[j][5]=tn.amount-(tn.currentUnits*tn.reward);fn[j][8]=tn.currentUnits;}}
 						} else {
@@ -176,6 +184,28 @@ connection.on("ReceiveBotState", gameState => {
 						}
 					}
 	
+	
+	//In a 4V4, I start getting starved for Heat, 
+		//Set a variable, if total wood supply < 50 000
+		//No More wood
+		//At this time set kill = true
+		//Calculate how much rounds my remaining Wood + Heat can sustain
+		//if my remaining res can sustain growth till the end. set kill = false
+	if(woodsup<50000){
+		console.log("Starve = True");
+		starve=true;
+		i=cycle;
+		j=mp;
+		nh=mh+(Math.floor(mw/3*5));
+		for(i=cycle;i<250;i++){
+			console.log("Cycle: "+i+" Population:"+j+" Heat Left:"+nh);
+			nh=nh-j;
+			if(nh<0){break;}
+			j=Math.ceil(j*1.05);
+			if(i==248){starve=false;console.log("Starve = False");}
+		}
+		
+	}
 	
 	minr=0;maxr=2500;
 	
@@ -410,7 +440,7 @@ function mine(){
 }
 
 function burn(){
-	if(nh>0&&mw>=3&&ma>0&&r<2490&&heatreq>0){
+	if(nh>0&&mw>=3&&ma>0&&r<2490&&heatreq>0&&!starve){
 		wh=Math.ceil(nh/5);
 		if(wh*3>mw){wh=Math.floor(mw/3);}
 		if(ma<wh){wh=ma;}

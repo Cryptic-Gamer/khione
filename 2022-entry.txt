@@ -28,10 +28,20 @@ Can I send units to a node the same turn they would finish.
 I need to test these cases. 
 A) Can I send units the same turn they return
 B) Can I interact with a node the same turn the units would finish.
+**Conclusion is no, The bot resolves the nodestates and sends it to the players, then you make your moves, if you make a move ahead of this there will be conflicts, as its realtime...
 
 Regardless of this feature.
 By bot is already capable of maxing out its population and storages against my version that does not stockpile heat. 
 
 
 I will test this a bit later. by looking at when units will return and seeing if I can send it out again same turn as its return. 
+
+As a secondary point, the second event is all about speed. So I optimized my own bot to beat my opponents on processing times. 
+So i managed to cut my processing time down to 0.3 - 2MS per turn. closer to 0.3 MS where it matters in endgame. 
+
+Pottential improvements...
+I could possibly not add food to my stockpile till my heat is resolved for a stronger game.
+
+Will test against my own bot to see if i can get more heat out earlier this way. Food will just never be a problem. 
+ 
 

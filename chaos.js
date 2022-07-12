@@ -14,7 +14,7 @@ let m; //Moves
 var mx, my, ma, mp, ms, mct, act, mrn=0, mid; //x,y,available,population, scout, tier, resnodes
 
 var en=[];
-var heatreq=14000000;//Make sure this works
+var heatreq=14500000;//Make sure this works
 
 const connection = new signalR.HubConnectionBuilder().withUrl(url).configureLogging(signalR.LogLevel.Information).build();
 
@@ -310,12 +310,15 @@ connection.on("ReceiveBotState", gameState => {
 		
 		
 		build=true;
-		if(r>2000){build=false;}
+		if(bc>40){build=false;}
+		else{
+			if((bc%4==0||bc%4==2)&&mw-woff>50*bl&&mo-soff>=50*bl&&mg-goff>=20*bl){
+			} else if(bc%4==1&&mw-woff>65*bf&&mo-soff>=65*bf&&mg-goff>=30*bf){
+			} else if(bc%4==3&&mw-woff>100*bq&&mo-soff>=100*bq&&mg-goff>=50*bq){
+			} else {build=false;}
+		}
 		//Dont even process territory if I cant build anything (Territory is a heavy calculation)
-		if((bc%4==0||bc%4==2)&&mw-woff>50*bl&&mo-soff>=50*bl&&mg-goff>=20*bl){
-		} else if(bc%4==1&&mw-woff>65*bf&&mo-soff>=65*bf&&mg-goff>=30*bf){
-		} else if(bc%4==3&&mw-woff>100*bq&&mo-soff>=100*bq&&mg-goff>=50*bq){
-		} else {build=false;}
+			//Just build 50 for challenge, dont over commit before tests
 		
 		//if(bc>16){build=false;}//Just test with 4 buildings
 		while(ma>0&&build){

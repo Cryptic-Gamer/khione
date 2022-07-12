@@ -309,19 +309,67 @@ connection.on("ReceiveBotState", gameState => {
 		
 		
 		
-		build=true;
-		if(bc>40){build=false;}
-		else{
-			if((bc%4==0||bc%4==2)&&mw-woff>50*bl&&mo-soff>=50*bl&&mg-goff>=20*bl){
-			} else if(bc%4==1&&mw-woff>65*bf&&mo-soff>=65*bf&&mg-goff>=30*bf){
-			} else if(bc%4==3&&mw-woff>100*bq&&mo-soff>=100*bq&&mg-goff>=50*bq){
-			} else {build=false;}
+		
+		//Diagnose above, Why is my buildings failing
+		
+		
+		
+		//Try and replenish what was spent on buildings (Via NW)
+			//Dont build out of own 
+		
+		
+		//Absolute build, Allow as much building as you want. BUT no building in new building ranges
+			//Array that stores building x, y and radius
+			//Loop through newbuildings and check if territory target falls within zone. 
+			//No more need for BC either...
+			//Adjust NF after build phase so units can farm res they just used for building so long.
+		
+		//Allow build only if mw+next constraints>=65...
+			//Cannot allow building new to hinder my developments
+		
+		
+		//Buildings work as follows
+			//On build, travel starts, After travel, requires x time to build and takes res after completion or something like that
+			//Check gamestate for building info incase its there
+			//Else add building into array
+				//Add res into array
+				//Keep alive while exists. 
+				//Use the NT array for the heck of it. Will prevent duplicate builds. 
+				//Always keep upcomming building res in reserve. And effectively remove it from my supply (so I will try and farm it back)
+				//I see some wastage coming in that case... Maybe fix for the last event
+				
+		
+		
+		
+		if(ma>0&&bc>0){
+			nw=nw+p[mct].tierMaxResources.wood-tw;
+			ns=ns+p[mct].tierMaxResources.stone-ts;
+			ng=ng+p[mct].tierMaxResources.gold-tg;
+			nf=nf+p[mct].tierMaxResources.food-tf;	
+			
+			if(heatreq>0&&!starve){nf=Math.ceil(nf/2);}
+			
+			wf=0; ww=0; wh=0; ws=0; wg=0;
+
+			mineGD();
+			mineSN();
+			cut();
+			farm();
 		}
+		
+		
+		build=true;
+		
+		if((bc%4==0||bc%4==2)&&mw-woff>50*bl&&mo-soff>=50*bl&&mg-goff>=20*bl){
+		} else if(bc%4==1&&mw-woff>65*bf&&mo-soff>=65*bf&&mg-goff>=30*bf){
+		} else if(bc%4==3&&mw-woff>100*bq&&mo-soff>=100*bq&&mg-goff>=50*bq){
+		} else {build=false;}
+		
 		//Dont even process territory if I cant build anything (Territory is a heavy calculation)
 			//Just build 50 for challenge, dont over commit before tests
 		
 		//if(bc>16){build=false;}//Just test with 4 buildings
-		while(ma>0&&build){
+		while(ma>0&&build&&bc<20){
 			
 			//Territory
 			for(j = a.length-1; j>=0; j--){
@@ -387,54 +435,7 @@ connection.on("ReceiveBotState", gameState => {
 			}
 		}
 	
-		
 	console.log("Buildings:"+bc);	
-		//Diagnose above, Why is my buildings failing
-		
-		
-		
-		//Try and replenish what was spent on buildings (Via NW)
-			//Dont build out of own 
-		
-		
-		//Absolute build, Allow as much building as you want. BUT no building in new building ranges
-			//Array that stores building x, y and radius
-			//Loop through newbuildings and check if territory target falls within zone. 
-			//No more need for BC either...
-			//Adjust NF after build phase so units can farm res they just used for building so long.
-		
-		//Allow build only if mw+next constraints>=65...
-			//Cannot allow building new to hinder my developments
-		
-		
-		//Buildings work as follows
-			//On build, travel starts, After travel, requires x time to build and takes res after completion or something like that
-			//Check gamestate for building info incase its there
-			//Else add building into array
-				//Add res into array
-				//Keep alive while exists. 
-				//Use the NT array for the heck of it. Will prevent duplicate builds. 
-				//Always keep upcomming building res in reserve. And effectively remove it from my supply (so I will try and farm it back)
-				//I see some wastage coming in that case... Maybe fix for the last event
-				
-		
-		
-		
-		if(ma>0){
-			nw=nw+p[mct].tierMaxResources.wood-tw;
-			ns=ns+p[mct].tierMaxResources.stone-ts;
-			ng=ng+p[mct].tierMaxResources.gold-tg;
-			nf=nf+p[mct].tierMaxResources.food-tf;	
-			
-			if(heatreq>0&&!starve){nf=Math.ceil(nf/2);}
-			
-			wf=0; ww=0; wh=0; ws=0; wg=0;
-
-			mineGD();
-			mineSN();
-			cut();
-			farm();
-		}
 		
 		
 		if(ma>0&&heatreq>0){
@@ -446,6 +447,10 @@ connection.on("ReceiveBotState", gameState => {
 		   burn();
 		   cut();
 		   }
+		
+		
+		
+		
 		
 		for(i=1;i<=7;i++){
 			mp=Math.ceil(mp*1.05);

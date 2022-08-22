@@ -5,16 +5,18 @@ let url = process.env["RUNNER_IPV4"] ?? "http://localhost";
 url = url.startsWith("http://") ? url : "http://" + url;
 url += ":5000/runnerhub";
 
-let w, a, b, bi, p; //World Vars
-var i,j,k //generic loops
+let w, a, b, bi, p, t; //World Vars
+var i,j,k,l //generic loops
 var ds;
 
 let r; //Round (Maybe Redundent)
 let m; //Moves
-var mx, my, ma, mp, ms, mct, act, mrn=0, mid; //x,y,available,population, scout, tier, resnodes
+var mx, my, ma, mp, ms, mct, mrn=0, mid; //x,y,available,population, scout, tier, resnodes
+
+var sct=false;
 
 var en=[];
-var heatreq=14500000;//Make sure this works
+var heatreq=14000000;//Make sure this works
 
 const connection = new signalR.HubConnectionBuilder().withUrl(url).configureLogging(signalR.LogLevel.Information).build();
 
@@ -43,9 +45,7 @@ var wn=[];//Wood Nodes
 var sn=[];//Stone Nodes
 var gd=[];//Gold Nodes
 var mt=[];//Territory Nodes
-var sc=0;//Scout Towers (Own)
 
-var l;//Temp Array Lenght
 var tn;//Temp Nodes
 
 var nt;
@@ -53,436 +53,832 @@ var nt;
 var mf, mw, mo, mh, mg; //Food, Wood, Stone, heat
 var nf, nw, ns, nh, ng; //Need Food, Wood, Stone, Heat
 var wf, ww, ws, wh, wg; //Worker food, wood, stone, heat
-var tx, ty, tp, tid; //Temp Territory vars, X, y, points(score), id
-var tf, tw, ts, tg; //total res harvested to rebalance the max storage
-var woodsup;
+var tx, ty, tp, np, ttp, tb, tid; //Temp Territory vars, X, y, new points, points(score), temporary Points,building 
 var starve=false;
 
-var lv=0.16; //Livetime value of a unit (Absolutely no usecase in V1.5 but could be essential later on.)
 
-var sct=0;//Scout
-
-var cf=[0,0,0,0,0,0,0],cw=[0,0,0,0,0,0,0],cs=[0,0,0,0,0,0,0],cg=[0,0,0,0,0,0,0];
-var cycle=0, ncycle;
+var fr=[]; //Future Resources
+var cycle=0;
 var minr,maxr;
+var cbuild = true;
 
-//Build Building Array
-	//Set a score on every tile
-	//Set best building for tile
-	//Later when building, loop through empty territory and build best
-	//Build if res exceeds 10%
-	//Only build if available
+//just temp
 
+var mbuild=0, abuild;
+
+//To do, 
+	//Build Phase 2:
+	//Calculate Impact of building Lumbermill on wood in own territory
+	//Calculate Unit Save
+	//If works out well, do the same with Farms
+	//Ignore Stone and gold (Too little accross the map)
+
+//More Lumbermills will free up more units  for Territory Conquest
+	
+//For Expantion, Try and expand in a 90 degree radius towards the center. 
+	//Everyone is limited by expand speed, 
+	//But if I can expand towards the center I can grab whats behind me later on. 
+	//Territorial advantage can only be combat by other bots through takeover. 
+	//Takeover reduces Heat 
+
+//Thought, what if I take a resource node before enemy farms it...
+	//Account for the protection offset (only 70% received).
+	
+//Test Territory Dominance VS Heat Generation (Test by flipping heat gen and takeover around)
+
+//Set 3 Dimentional Build? 
+	//Calculate best possible build based on next 3 buildings
+	//Monte Carlo tree search maybe
+	//Extra points for more central tiles...
+	//More points the further away from me. 
 
 var bt=[];//Node State, score, distance, boosted
 //Add var bt as well if we get second building
 for(i=0;i<40;i++){
 	bt.push([]);
 	for(j=0;j<40;j++){
-		bt[i].push(['N',0,0]);
+		bt[i].push(['N',0]);
 	}
 }
 
-//Only build if minimum is met so advancement isnt hindered.
+//Handle 
+var nb=[], rem, build=[], canbuild=[];
+var fst, mst, wst; //Res Status, temp status
+var wr,gr,sr;
+var adv;
+var bphase=1;
 
-//Handles Buildings
-var build;
-var bc=0;
-var nb=[],rem;
-var bl=1,bf=1,bq=1;	
-var fst, sst, gst, wst, tst; //Res Status, temp status
+var quad="";
 
-var woff,goff,soff; 
+//build Array - Building, amount modifier, total cost, territory weight, size (according to the MT array), build time
+build.push(['L', 1, 40, 15, 0, 1, 9, 5]);
+build.push(['O', 1, 220, 110, 0, 3, 49, 10]);
+build.push(['F', 1, 50, 25, 0, 2, 25, 5]);
+build.push(['Q', 1, 90, 45, 0, 2, 25, 5]);
+build.push(['R', 1, 50, 35, 0, 1, 9, 2]);
 
+var t1, t2, t3, t4, t5, tcomp; //temporary variables for performance boosts
+var mwood, mstone, mgold;
+var twr,tsr,tgr;	
 
 connection.on("ReceiveBotState", gameState => {
-	
-	console.time('tick');
+
 	w=gameState.world;
 	a=w.map.availableNodes;
 	b=gameState.bots;
-	p=gameState.populationTiers;
+	
 	
 	r=w.currentTick;
 	console.log("Tick:"+r);
 	
+	
 	cycle=Math.floor(r/10);
-	if(r%10==0){
-		cs.shift();cs.push(0);
-		cf.shift();cf.push(0);
-		cw.shift();cw.push(0);
-		cg.shift();cg.push(0);
-	}
 	
 	if(r==1){
+		
+		p=gameState.populationTiers;
+		
 		//Set up initial data
 		bi=gameState.botId;
 		for(i = b.length-1; i>=0; i--){
 			if(b[i].id==bi){
 				mx=b[i].baseLocation.x;my=b[i].baseLocation.y;
+				if(mx<20&&my<20){quad="NW";}
+				else if(mx>20&&my<20){quad="NE";}
+				else if(mx<20&&my>20){quad="SW";}
+				else {quad="SE";}
+				
 				mid=i;
 			} else {
 				en.push(["ENEMY"]);
 			}
-		}
+		} 
+		
+		
 		
 		for(i = 0; i<w.map.scoutTowers.length; i++){
 			  tn=w.map.scoutTowers[i];
-			  s.push([tn.id,tn.position.x,tn.position.y,bR(d(tn.position.x,tn.position.y,mx,my))]);
-				
-			  bt[tn.position.y][tn.position.x][0]='X';
-			
+			  s.push([tn.id,bR(d(tn.position.x,tn.position.y,mx,my))]);
 		 	}
-		s.sort(function(a,b){return a[3]-b[3]});
+		s.sort(function(a,b){return a[1]-b[1]});
+		
+		for(i=0;i<40;i++){
+			for(j=0;j<40;j++){
+				bt[i][j][1]=bR(d(j,i,mx,my));
+				}
+			}
 		}
-	
+		
 	m={"playerId" : bi,"actions" : []} 
 	
-
 	ma=b[mid].availableUnits;
-	mp=b[mid].population;
 	mf=b[mid].food;
 	mw=b[mid].wood;
 	mo=b[mid].stone;
 	mh=b[mid].heat;
 	mg=b[mid].gold;
-	msc=b[mid].map.scoutTowers.length;
 	mct=b[mid].currentTierLevel;
 	
-	goff=p[mct].tierResourceConstraints.gold;soff=p[mct].tierResourceConstraints.stone;woff=p[mct].tierResourceConstraints.wood;
+	abuild=-1;
 	
-	act=[];
-	for(j = b[mid].actions.length-1; j>=0; j--){
-		tn=b[mid].actions[j];
-		if(tn.actionType==8||tn.actionType==7||tn.actionType==6){act.push(tn.targetNodeId);}
-	}
-	
-	//If NB no longer in act, remove...
-	for(i = nb.length-1; i>=0; i--){
-		rem=true;
-		for(j = act.length-1; j>=0; j--){if(act[j]==nb[i][3]){rem=false;}}
-		if(rem){nb.splice(i, 1);}
-	}
-	
-	//Reajust offsets from already built buildings
-	for(i = nb.length-1; i>=0; i--){
-		woff=woff+nb[i][4];
-		soff=soff+nb[i][5];
-		goff=goff+nb[i][6];
+	//Try fetch building costs directly from bot data
+	for(i=build.length-1;i>=0;i--){build[i][1]=1;
+		for(j=b[mid].buildings.length-1;j>=0;j--){
+			if((build[i][0]=='L'&&b[mid].buildings[j].type==8)||
+			   (build[i][0]=='F'&&b[mid].buildings[j].type==7)||
+			   (build[i][0]=='Q'&&b[mid].buildings[j].type==6)||
+			   (build[i][0]=='O'&&b[mid].buildings[j].type==9)||
+			   (build[i][0]=='R'&&b[mid].buildings[j].type==10)){abuild++;build[i][1]=build[i][1]+0.5;}
+		}						  
 	}
 	
 	fst=b[mid].statusMultiplier.foodReward;
-	sst=b[mid].statusMultiplier.stoneReward;
-	gst=b[mid].statusMultiplier.goldReward;
+	mst=b[mid].statusMultiplier.goldReward;
 	wst=b[mid].statusMultiplier.woodReward;
 	
-	//To Do
-		//Add resources to nb. 
-		//Remove from stockpile res while exists in DB
+	console.log("Current Status Multipliers: fst="+fst+",mst="+mst+",wst="+wst);
 	
-	if(sc<msc){
-		tn=b[mid].map.scoutTowers;
-		for(j=msc-1;j>=0;j--){
-			for(k=s.length-1;k>=0;k--){
-				if(s[k][0]==tn[j]){
-					s.splice(k, 1);
+	//Future Res: fr= id, action, units, total offset, type (stone or gold)
+	sct=false;
+	fr=[];
+	for(i = 0; i<b[mid].actions.length; i++){
+		tn=b[mid].actions[i];
+		
+		if(tn.actionType==1){
+			sct=true;
+		}
+		else if(tn.actionType==5){mw=mw-(Math.ceil(tn.numberOfUnits*3));mh=mh+(Math.ceil(tn.numberOfUnits/3)*5);}
+		else if(tn.actionType>5){
+		
+			for(j=build.length-1;j>=0;j--){
+				if((build[j][0]=='L'&&tn.actionType==8)||
+			   (build[j][0]=='F'&&tn.actionType==7)||
+			   (build[j][0]=='Q'&&tn.actionType==6)||
+			   (build[j][0]=='O'&&tn.actionType==9)||
+			   (build[j][0]=='R'&&tn.actionType==10)){build[j][1]=build[j][1]+0.5;}
+			}
+			
+		}
+		else {
+			fr.push([tn.targetNodeId, tn.actionType, tn.numberOfUnits, 0, "", tn.tickActionCompleted]);
+		}
+	}
+	
+	
+	
+	//Can I see enemy pending actions? 
+		//Look and if I can counter build...
+		//Future Farm Buildings (Or Try...)
+		//Maximize build speed early will be the ultimate strategy...
+	
+	t=b[mid].territory;
+	
+	cbuild=true;
+		
+	//Test a variation where we check Mo an MG and factor in already built buildings
+	mp=b[mid].population;
+	adv=0;for(i=1;i<=6;i++){mp=Math.ceil(mp*1.05);if(mp>=p[mct].maxPopulation){adv=i;break;}}
+	mp=b[mid].population;
+	
+	//Build Strategy
+		//Phase 1: Max territory Grab
+		//Phase 2: Once I own Max territory, Calculate if its worth Building remaining Structures for Speed Boost
+			//Allow Lumber if number of units required to build is < the cost of building the structure
+			//Allow food if the unit savings till end game < the cost of building
+				//In both cases use buildings as a possible wall. 
+		
+		//For Territory
+			//Phase 1 try and grab any Wood lots with resources. 
+				//Try and do this before I burn extra Heat even???
+				//Try and expand and take resource nodes???
+				//Resource Nodes should be easy to keep
+			
+		//What is the winning FActor? 
+			//Still heat...
+			//It was always about heat and the starve function...
+			//In the finals undoubtedly the 4v4 will destroy resources on the map, and start fighting over territory. 
+			//One possibility is that I only defend my own territory, spend the bare minimum towards offense. 
+			//Endgame will be extremely fast in the top 8. So rushing towards my heat requirements might be the best play (While others perhaps apply efforts to controlling Resource Nodes). 
+			//Towards the end I will still have extra units. But it should be far better to just work on spending all Wood in my own territory.
+			//Defence will be cheaper than offence. and losing some nodes will not matter either (Ignore empty and food nodes) (but dont ignore food nodes closeby)
+			//Neither Should I ignore Wood Nodes in the distance
+				
+	
+	
+	
+	for(k=s.length-1;k>=0;k--){
+		for(j=b[mid].map.scoutTowers.length-1;j>=0;j--){
+			if(s[k][0]==b[mid].map.scoutTowers[j]){s.splice(k, 1);console.log("Removed Tower");break;}
+		}
+	}
+	
+	//Rebuild Map Nodes
+	wn=[];fn=[];sn=[];gd=[];
+
+	for(j = w.map.nodes.length-1; j>=0; j--){
+		tn=w.map.nodes[j];
+		if(tn.amount<=0){continue;}
+		
+		tx=tn.position.x;ty=tn.position.y;
+		ds=bt[ty][tx][1]+tn.workTime;
+		
+		if(tn.type==1){
+			wn.push([tn.id,tn.maxUnits-tn.currentUnits,tn.reward,tn.amount,Math.round(tn.reward/ds * 100) / 100, ds, tx, ty]);
+			bt[ty][tx][0]='W';
+		} else if(tn.type==2){
+			fn.push([tn.id,tn.maxUnits-tn.currentUnits,tn.reward,tn.amount,Math.round(tn.reward/ds * 100) / 100, ds, tx, ty]);
+			bt[ty][tx][0]='F';
+		} else if(tn.type==3){
+			sn.push([tn.id,tn.maxUnits-tn.currentUnits,tn.reward,tn.amount,Math.round(tn.reward/ds * 100) / 100, ds, tx, ty]);
+			bt[ty][tx][0]='S';
+		} else if(tn.type==4){
+			gd.push([tn.id,tn.maxUnits-tn.currentUnits,tn.reward,tn.amount,Math.round(tn.reward/ds * 100) / 100, ds, tx, ty]);
+			bt[ty][tx][0]='G';
+		} else {
+		}
+	}
+	
+	
+	//Update Own territory
+	for(j = t.length-1; j>=0; j--){
+				tx=t[j].x;
+				ty=t[j].y;
+				t1=bt[ty][tx][0];
+		
+				if(t1=='N'){bt[ty][tx][0]='E';}
+				else if(t1=='F'||t1=='W'||t1=='S'||t1=='G'){bt[ty][tx][0]='T';}
+				else{}
 				}
+	
+	//Update enemy territory on Map
+	for(i = b.length-1; i>=0; i--){
+			if(b[i].id!=bi){
+				t1=b[i].territory;
+				en.push(["ENEMY"]);
+				for(j = t1.length-1; j>=0; j--){
+					if(bt[t1[j].y][t1[j].x][0]=='N'){bt[t1[j].y][t1[j].x][0]='X';}
+					if(bt[t1[j].y][t1[j].x][0]=='F'){bt[t1[j].y][t1[j].x][0]='EF';}
+					if(bt[t1[j].y][t1[j].x][0]=='W'){bt[t1[j].y][t1[j].x][0]='EW';}
+					if(bt[t1[j].y][t1[j].x][0]=='S'){bt[t1[j].y][t1[j].x][0]='ES';}
+					if(bt[t1[j].y][t1[j].x][0]=='G'){bt[t1[j].y][t1[j].x][0]='EG';}
+				}
+				
 			}
-		}
-		sc=msc;
-	}
+		} 
 	
-					
-	if(mrn<w.map.nodes.length){
-		//fn=[];sn=[];wn=[];
-		for(j = w.map.nodes.length-1; j>=0; j--){
-			tn=w.map.nodes[j];
-			tx=tn.position.x;ty=tn.position.y;
-			if(bt[ty][tx][0]!='N'&&bt[ty][tx][0]!='E'){continue;}
-			
-			ds=bR(d(tx,ty,mx,my))+tn.workTime;
-						
-			if(tn.type==1){
-				wn.push([tn.id,tn.maxUnits-tn.currentUnits,tn.reward,tn.amount,Math.round(tn.reward/ds * 100) / 100, ds, tx, ty]);	
-			} else if(tn.type==2){
-				fn.push([tn.id,tn.maxUnits-tn.currentUnits,tn.reward,tn.amount,Math.round(tn.reward/ds * 100) / 100, ds, tx, ty]);
-			} else if(tn.type==3){
-				sn.push([tn.id,tn.maxUnits-tn.currentUnits,tn.reward,tn.amount,Math.round(tn.reward/ds * 100) / 100, ds, tx, ty]);
-			} else if(tn.type==4){
-				gd.push([tn.id,tn.maxUnits-tn.currentUnits,tn.reward,tn.amount,Math.round(tn.reward/ds * 100) / 100, ds, tx, ty]);
-			} else {
-				console.log("Found Something Strange:"+JSON.stringify(tn));
-			}
-			
-			bt[ty][tx][0]='X';
-			bt[ty][tx][1]=Math.round(tn.reward/ds * 100) / 100;
-			
-			//To Do, remove above duplication.
-				//Where do I find nodes I can actually use's IDs???
-				//Later Zero score on nodes thats empty when i remove them...
-		}
-					
-		mrn=w.map.nodes.length;
-		wn.sort(function(a,b){return b[4]-a[4]});
-		fn.sort(function(a,b){return b[4]-a[4]});
-		sn.sort(function(a,b){return b[4]-a[4]});
-		gd.sort(function(a,b){return b[4]-a[4]});
-	}
 	
-	if(wn.length>0){
-	   woodsup=0;
-	   }
+	mwood=0;
+	mstone=0;
+	mgold=0;
 	
+	
+	//Adjust Nodes for rewards (Own and Enemy)
 	for(i = w.map.nodes.length-1; i>=0; i--){
 						tn=w.map.nodes[i];
+						
+						t5=0;for(k=fr.length-1;k>=0;k--){if(tn.id==fr[k][0]){t5=t5+fr[k][2];}}
+						t2=tn.currentUnits-t5;
+						t4=Math.floor(tn.reward*0.7);	
+		
 						if(tn.type==1){
-							//On Empty change build scores for tile
-							for(j=wn.length-1;j>=0;j--){if(wn[j][0]==tn.id){
-								if(tn.amount<=0){wn.splice(j, 1);continue;}
-								wn[j][1]=tn.maxUnits-tn.currentUnits;wn[j][3]=tn.amount-(tn.currentUnits*tn.reward);}}
-							woodsup=woodsup+tn.amount;
+			
+							for(j=wn.length-1;j>=0;j--){t1=wn[j];if(t1[0]==tn.id){
+								t3=tn.reward+wst;
+								
+								if(bt[t1[7]][t1[6]][0]=='T'){
+									wn[j][2]=t3;
+									wn[j][4]=Math.round(t3/bt[t1[7]][t1[6]][1] * 100) / 100;	
+									wn[j][3]=tn.amount-(t5*t3)-(t2*t4);	
+									mwood=mwood+wn[j][3];
+									}
+								if(bt[t1[7]][t1[6]][0]=='EW'){
+									wn[j][2]=t4;
+									wn[j][4]=Math.round(t4/bt[t1[7]][t1[6]][1] * 100) / 100;
+									wn[j][3]=tn.amount-(t5*t4)-(t2*tn.reward);	
+									}
+							}}
 						} else if(tn.type==2){
-							for(j=fn.length-1;j>=0;j--){if(fn[j][0]==tn.id){fn[j][1]=tn.maxUnits-tn.currentUnits;fn[j][3]=tn.amount-(tn.currentUnits*tn.reward);}}
+							for(j=fn.length-1;j>=0;j--){t1=fn[j];if(t1[0]==tn.id){
+								t3=tn.reward+fst;
+								
+								if(bt[t1[7]][t1[6]][0]=='T'){
+									fn[j][2]=t3;
+									fn[j][4]=Math.round(t3/bt[t1[7]][t1[6]][1] * 100) / 100;	
+									fn[j][3]=tn.amount-(t5*t3)-(t2*t4);	
+									}
+								if(bt[t1[7]][t1[6]][0]=='EF'){
+									fn[j][2]=Math.floor(tn.reward*0.7);
+									fn[j][4]=Math.round(fn[j][2]/bt[t1[7]][t1[6]][1] * 100) / 100;	
+									fn[j][3]=tn.amount-(t5*t4)-(t2*tn.reward);	
+									}
+							}}
 						} else if(tn.type==3){
-							for(j=sn.length-1;j>=0;j--){if(sn[j][0]==tn.id){sn[j][1]=tn.maxUnits-tn.currentUnits;sn[j][3]=tn.amount-(tn.currentUnits*tn.reward);}}
+							for(j=sn.length-1;j>=0;j--){t1=sn[j];if(t1[0]==tn.id){
+								t3=tn.reward+mst;
+								
+								if(bt[t1[7]][t1[6]][0]=='T'){
+									sn[j][2]=tn.reward+mst;
+									sn[j][4]=Math.round(sn[j][2]/bt[t1[7]][t1[6]][1] * 100) / 100;	
+									sn[j][3]=tn.amount-(t5*t3)-(t2*t4);
+									mstone=mstone+sn[j][3];
+									}
+								if(bt[t1[7]][t1[6]][0]=='ES'){
+									sn[j][2]=Math.floor(tn.reward*0.7);
+									sn[j][4]=Math.round(sn[j][2]/bt[t1[7]][t1[6]][1] * 100) / 100;		
+									sn[j][3]=tn.amount-(t5*t4)-(t2*tn.reward);	
+									}	
+							}}
 						} else {
-							for(j=gd.length-1;j>=0;j--){if(gd[j][0]==tn.id){gd[j][1]=tn.maxUnits-tn.currentUnits;gd[j][3]=tn.amount-(tn.currentUnits*tn.reward);}}
+							for(j=gd.length-1;j>=0;j--){t1=gd[j];if(t1[0]==tn.id){
+								t3=tn.reward+mst;
+								
+								if(bt[t1[7]][t1[6]][0]=='T'){
+									gd[j][2]=tn.reward+mst;
+									gd[j][4]=Math.round(gd[j][2]/bt[t1[7]][t1[6]][1] * 100) / 100;	
+									gd[j][3]=tn.amount-(t5*t3)-(t2*t4);	
+									mgold=mgold+gd[j][3];
+									}	
+								if(bt[t1[7]][t1[6]][0]=='EG'){
+									gd[j][2]=Math.floor(tn.reward*0.7);
+									gd[j][4]=Math.round(gd[j][2]/bt[t1[7]][t1[6]][1] * 100) / 100;
+									gd[j][3]=tn.amount-(t5*t4)-(t2*tn.reward);	
+									}
+							}}
 						}
 					}
 	
-	if(woodsup<50000){
-		starve=true;
-		i=cycle;
-		j=mp;
-		nh=mh+(Math.floor(mw/3*5));
-		for(i=cycle;i<250;i++){
-			nh=nh-j;
-			if(nh<0){break;}
-			j=Math.ceil(j*1.05);
-			if(i==248){starve=false;}
+	for(k=fr.length-1;k>=0;k--){
+		for(j=wn.length-1;j>=0;j--){if(wn[j][0]==fr[k][0]){fr[k][3]=fr[k][2]*wn[j][2];mwood=mwood+fr[k][3];}}
+		for(j=fn.length-1;j>=0;j--){if(fn[j][0]==fr[k][0]){fr[k][3]=fr[k][2]*fn[j][2];}}
+		for(j=sn.length-1;j>=0;j--){if(sn[j][0]==fr[k][0]){fr[k][3]=fr[k][2]*sn[j][2];fr[k][4]='S';}}
+		for(j=gd.length-1;j>=0;j--){if(gd[j][0]==fr[k][0]){fr[k][3]=fr[k][2]*gd[j][2];fr[k][4]='G';}}
+	}
+	
+	
+	wn.sort(function(a,b){return b[4]-a[4]});
+	fn.sort(function(a,b){return b[4]-a[4]});
+	sn.sort(function(a,b){return b[4]-a[4]});
+	gd.sort(function(a,b){return b[4]-a[4]});
+		
+	for(j = nb.length-1; j>=0; j--){
+		tx=nb[j][0];ty=nb[j][1];
+		t1=nb[j][2];
+		bt[ty][tx][0]='T';
+		
+		for(k=ty-t1;k<=ty+t1;k++){if(k<0||k>39){continue;}
+			for(i=tx-t1;i<=tx+t1;i++){if(i<0||i>39||i==k){continue;}
+				t2=bt[k][i][0];
+				if(t2=='F'){bt[k][i][0]='FF';}	
+				if(t2=='N'){bt[k][i][0]='FE';}	
+				if(t2=='W'){bt[k][i][0]='FW';}
+				if(t2=='S'){bt[k][i][0]='FS';}
+				if(t2=='G'){bt[k][i][0]='FG';}
+			}
 		}
 	}
 	
-	minr=0;maxr=2500;
+	console.log("My Territorial Res left: W="+mwood+" S="+mstone+" G="+mgold);
+
+	//Set cBuild according to Territorial res
 	
+	//console.log("Future Farm Vars:"+JSON.stringify(fr));
+	
+	//Try running Woodsup only on nodes in own territory but set to 200 000
+	
+	starve=false;
+	if(bphase==3&&mwood<200000){
+		i=cycle;
+		j=mp;
+		t1=mf;
+		t2=0;
+		t3=mw;
+		
+		for(k=fr.length-1;k>=0;k--){
+				if(fr[k][1]==4){t3=t3+fr[k][3];}
+				else {}
+			}
+		
+		nh=mh+(Math.floor(t3/3*5));
+		for(i=cycle;i<250;i++){
+			nh=nh-j;
+			if(i>(248-t2)){starve=false;break;}
+			if(nh<=0){starve=true;break;}
+			if(t1>0){t1=t1-j;t2++;}
+			if(j<30516){j=Math.ceil(j*1.05);}
+			else {j=Math.ceil(j*1.03);}
+		}
+		if(starve){console.log("Starve Status:"+starve+" should end:"+i+" offset:"+t2);}
+	}
+	
+	//Set Goldsup anmd Stonesup
+		//Use that to deturmine if I can build or not
+	
+	//Build Phase 3
+		//Calculate unit saving / speed boost on Lumber
+		//check if I can afford it according to what I own in my territory
+		//If unit diff >farmtime -> continue
+	
+	//Has to combine with agrression
+		//If I have unit advantage i can try and take more territory
+		
+	
+	
+	//Calculate when it will be worth building lumber or food...
+		//From a unit loss / gain perspective...
+		//Burn Map resources on build advantage
+		//Use those buildings to build a wall around my territory as much as possible. 
+	
+	//Calculate wood in own territory
+		//Calculate impact of building a lumbermill 
+		//So take how many units will be required to farm the res
+		//Then calculate how many units will  
+	
+	//Consider Emptying "Hot Bases" first
+		//This would look like: "If Base was taken over"
+		//Set as Preference for Wood harvesting
+		//Can possibly push back enemy
+		//Dont takeover empty wood lots. 
+	
+	
+	minr=0;maxr=2499;
+	
+	//Step 1: Try and get what I need to maintain population (Complete)
 	if(ma>0){
 		
 		calcNeeds();
 		
 		nf=nf+mp;
-		tf=tf+mp;
 		nh=nh+mp;
 		
-		nw=nw+1;
-		tw=tw+1;
-		
-		if(nh>0){nw=nw+(Math.ceil(nh/5)*3);
-				tw=tw+(Math.ceil(nh/5)*3);
-				}
-		
-		wf=0; ww=0; wh=0; ws=0;
 		farm();
 		burn();
 		cut();
 		
+		//Step 2: Try and get what I need to advance population (Complete)
+		
 			for(j=0;j<3;j++){if(ma<=0){break;}
 				nf=nf+Math.ceil(mp/1.2);
 				nh=nh+Math.ceil(mp/0.9);
-				tf=tf+Math.ceil(mp/1.2);
 				
-				if(nh>0){nw=nw+(Math.ceil(nh/5)*3);
-						tw=tw+(Math.ceil(nh/5)*3);
-						}
-				
-				wf=0; ww=0; wh=0; ws=0;
-				cut();
-				farm();
+				farm();		 
 				burn();
 				cut();
 			}
-		
-		if(s.length>0){scout();}
+		}
 	
-		//Handles Buildings
+		//Step 3: Scout (Complete)
+		scout();
 		
-		//On build
-		
-		
-		
-		
-		//Diagnose above, Why is my buildings failing
-		
-		
-		
-		//Try and replenish what was spent on buildings (Via NW)
-			//Dont build out of own 
-		
-		
-		//Absolute build, Allow as much building as you want. BUT no building in new building ranges
-			//Array that stores building x, y and radius
-			//Loop through newbuildings and check if territory target falls within zone. 
-			//No more need for BC either...
-			//Adjust NF after build phase so units can farm res they just used for building so long.
-		
-		//Allow build only if mw+next constraints>=65...
-			//Cannot allow building new to hinder my developments
-		
-		
-		//Buildings work as follows
-			//On build, travel starts, After travel, requires x time to build and takes res after completion or something like that
-			//Check gamestate for building info incase its there
-			//Else add building into array
-				//Add res into array
-				//Keep alive while exists. 
-				//Use the NT array for the heck of it. Will prevent duplicate builds. 
-				//Always keep upcomming building res in reserve. And effectively remove it from my supply (so I will try and farm it back)
-				//I see some wastage coming in that case... Maybe fix for the last event
-				
-		
-		
-		
-		if(ma>0&&bc>0){
-			nw=nw+p[mct].tierMaxResources.wood-tw;
-			ns=ns+p[mct].tierMaxResources.stone-ts;
-			ng=ng+p[mct].tierMaxResources.gold-tg;
-			nf=nf+p[mct].tierMaxResources.food-tf;	
-			
-			if(heatreq>0&&!starve){nf=Math.ceil(nf/2);}
-			
-			wf=0; ww=0; wh=0; ws=0; wg=0;
-
-			mineGD();
-			mineSN();
-			cut();
+		//Step 4: Make sure I have enough food for next advancement (only if ADV near)
+			//This tweak seems reasonable and could lower my onhand food requirements even further. Always best to try and push extra units down the funnel so other advancement strategies take preference.
+		if(ma>0&&adv>0&&adv<=2){
+			nf=nf+(p[mct+1].tierResourceConstraints.food-(Math.ceil(mp/1.2)*3));
 			farm();
 		}
 		
+		//Step 5: Do the most optimum wood expansion
+			//Save Outposts for central expantions maybe...
+			//Maybe try and force central expantions anyways. Could possibly be improved on. But unlocking most Wood might be the key to get my Population Maxed anyways. 
+			//Then even if i dont get to the center first, It might not matter. 
+			//That said, I do want some kind of Quadrant offset at least gamestart. 
+				//In gamestart where I build will not matter much, as I will not deplete
 		
-		build=true;
+		//Test for Resource Overhead
+			//Set max to 80% and see if my bot spills...
+			//Best testcase
+
 		
-		if((bc%4==0||bc%4==2)&&mw-woff>50*bl&&mo-soff>=50*bl&&mg-goff>=20*bl){
-		} else if(bc%4==1&&mw-woff>65*bf&&mo-soff>=65*bf&&mg-goff>=30*bf){
-		} else if(bc%4==3&&mw-woff>100*bq&&mo-soff>=100*bq&&mg-goff>=50*bq){
-		} else {build=false;}
+		//Build Phase 1
+			//Check my quadrent
+			//Ignore tiles behind me from expantion Scoring
 		
-		//Dont even process territory if I cant build anything (Territory is a heavy calculation)
-			//Just build 50 for challenge, dont over commit before tests
+		//Build Phase 2
+			//Fill up Quadrent, 
+			//Dont allow building Roads here (Roads only for early speed)
+	
+		//Build Phase 3
+			//calculate the advantage that building would give (Speed boost)
+			//if unit advantage exceeds replacement costs - build
 		
-		//if(bc>16){build=false;}//Just test with 4 buildings
-		while(ma>0&&build&&bc<20){
+		//if base in other territpory (Math.round 70% oddset)
 			
+		
+		//Force Build Phase 1 largest first (order by size)
+		//Force Build Phase 2 Lumber, Farm, Quarry only
+		//Force Build Phase 3 Lumber Only if it will give me a decent unit saving on farming my remaining res
+		
+		
+		//set and calculate an afford variable
+			//If I cant afford anything, allow unthrottled heat
+			
+		//bphase 3 calculate value of lumbermill
+			//If high, allow unthrottled heat
+		
+		
+	
+	
+		if(ma>0&&cbuild){
+			
+			wr=mw;
+			gr=mg;
+			sr=mo;
+			
+			if(adv>0){
+				t1=p[mct+1].tierResourceConstraints;
+				
+			    wr=wr-t1.wood-1;
+				gr=gr-t1.gold-1;
+				sr=sr-t1.stone-1;
+			   }
+			
+			//Consider doing res +2 like with heat generation.
+				//If mct==4
+			
+			
+			//Very Important...
+				//Allow build with FR as long as FR will arrive before building completion
+				//bt[ty][tx][1]+build[j][7]+1
+				//As new building will create an NB offset it should be fine. 
+			
+			//Readjust offsets from already built buildings
+			for(i = nb.length-1; i>=0; i--){wr=wr-nb[i][4];sr=sr-nb[i][5];gr=gr-nb[i][6]; }
+			
+			if(bphase<3){console.log("Can Build Wood:"+wr+" Stone:"+sr+" Gold:"+gr);}
+			
+			//calculate building territory weights
+			for(j = build.length-1; j>=0; j--){
+				build[j][4]=((2*build[j][2])+build[j][3])*build[j][1]/build[j][6];
+			}
+			
+			//Building Phase 1
+			
+			//build.sort(function (a, b){return a[5]-b[5];});
+			if(build[0][0]=='L'&&build[0][1]==1){canbuild=['L'];}
+			else if(bphase==1){canbuild=['L', 'F', 'Q', 'O', 'R'];} //Fastest territory
+			else if(bphase==2){canbuild=['L', 'F', 'Q'];}//Just Lumber, Farm Quarry //Cheapest territory
+			else if(bphase==3){canbuild=['L'];}//Just lumber, No sort
+			else {}
+			
+			
+			
+			
+			//console.log("Build:"+JSON.stringify(build));
+			console.log("Can Build:"+JSON.stringify(canbuild));
+			
+			if(bphase==1||bphase==2){
+			//console.log("Building Phase Active :"+bphase);
 			//Territory
-			for(j = a.length-1; j>=0; j--){
-				tx=a[j].position.x;
-				ty=a[j].position.y;
-
-				if(bt[ty][tx][0]=='N'){bt[ty][tx][0]='E';}
-				if(bt[ty][tx][0]=='X'){bt[ty][tx][0]='T';}
-				}
-
+			//[tx,ty,tid,s1,s2,s3] (Each tile can have the best score for all building types then)
 			mt=[];
 			for(j = a.length-1; j>=0; j--){
 				tx=a[j].position.x;
 				ty=a[j].position.y;
-
 				if(bt[ty][tx][0]=='T'){continue;}
+				
 				tid=a[j].id;
-				tp=0;
-				ds=bR(d(tx,ty,mx,my));
+				t2=calcScore(1);
+				t3=calcScore(2);
+				t4=calcScore(3);
+				if(t2+t3+t4>0){mt.push([tx,ty,tid,calcScore(1),calcScore(2),calcScore(3)]);}
+			}
+			
+				//Fastest Territory
+					//build.sort(function (a, b){return b[5]-a[5];});
+				
+				//Cheapest Expand
+					//build.sort(function (a, b){return a[4]-b[4];});
+				
+				//Sticking to a fixed sequence for expanding. 
+					//Reason is: Though Lumber and Road are small
+					//Dropping a 1 range building exposes some more land for the 2 range one. 
+					//So longterm its slightly faster expantions 
+						//Charting the expantions:
+						//Food - Lumber on home tile gives +16 food and the +5 Lumber
+						//Lumber - Food on home tile gives +5 lumber and then
+				
+			
+				
+			for(j = build.length-1; j>=0; j--){if(mt.length==0){if(nb.length==0){bphase++;}break;}
+				t1=build[j][0];	
+				
+				for(i=canbuild.length-1;i>=0;i--){if(canbuild[i]==t1){						   
+					t2=build[j][1];	
+					t3=build[j][2];	
+					t4=build[j][3];	
+					t5=build[j][5];
 
-				calcScore();
+					mt.sort(function (a, b){return b[t5+2]-a[t5+2];});
+					if(mt[0][t5+2]==0){continue;}
 
-				mt.push([tx,ty,tp,tid,ds]);
+					tx=mt[0][0];ty=mt[0][1];tid=mt[0][2];	
+					tcomp=bt[ty][tx][1]+build[j][7];
+					twr=wr;tsr=sr;tgr=gr;
+
+					for(k=fr.length-1;k>=0;k--){
+						if(fr[k][5]<tcomp+r){
+							if(fr[k][1]==4){twr=twr+fr[k][3];}
+							else if(fr[k][1]==2){
+								if(fr[k][4]=='S'){tsr=tsr+fr[k][3];}
+								else {tgr=tgr+fr[k][3];}
+							}
+							else {}
+						}
+					}						   
+
+
+					if(twr>t3*t2&&tsr>=t3*t2&&tgr>=t4*t2){mbuild++;
+
+						bt[ty][tx][0]='T';
+
+						nb.push([tx,ty,build[j][5],tid,t3*t2,t3*t2,t4*t2,tcomp+1]);
+														  
+						ma--;
+
+						if(t1=='L'){m.actions.push({"type" : 8,"units" : 1,"id" : tid});
+							console.log("Build:"+JSON.stringify({"type" : 8,"units" : 1,"id" : tid})+" X:"+tx+" Y:"+ty);}
+
+						if(t1=='F'){m.actions.push({"type" : 7,"units" : 1,"id" : tid});
+							console.log("Build:"+JSON.stringify({"type" : 7,"units" : 1,"id" : tid})+" X:"+tx+" Y:"+ty);}
+
+						if(t1=='Q'){m.actions.push({"type" : 6,"units" : 1,"id" : tid});
+							console.log("Build:"+JSON.stringify({"type" : 6,"units" : 1,"id" : tid})+" X:"+tx+" Y:"+ty);}
+
+						if(t1=='O'){m.actions.push({"type" : 9,"units" : 1,"id" : tid});
+							console.log("Build:"+JSON.stringify({"type" : 9,"units" : 1,"id" : tid})+" X:"+tx+" Y:"+ty);}
+
+						if(t1=='R'){m.actions.push({"type" : 10,"units" : 1,"id" : tid});
+							console.log("Build:"+JSON.stringify({"type" : 10,"units" : 1,"id" : tid})+" X:"+tx+" Y:"+ty);}
+
+						j=-1;break;
+						} 
+
+				}
+												  
+			}}
 			}
-	
-	mt.sort(function (a, b){return b[2]-a[2]||a[4]-b[4];});
-	
-	console.log("Territory Array"+JSON.stringify(mt));
 			
-			for(i = 0; i<nb.length; i++){
-				if(mt[0][1]<=nb[i][1]+2&&mt[0][1]>=nb[i][1]-2&&mt[0][0]<=nb[i][0]+2&&mt[0][0]>=nb[i][0]-2){
-				   mt.shift();i--;
-				   }
+			//Building Phase 3
+			if(bphase==3&&cbuild){
+				//console.log("Building Phase 3 Active");
 			}
 			
-			if(mt.length==0){break}
-			tx=mt[0][0];
-			ty=mt[0][1];
+		}
+		
+		if(ma>0){
+			//Account for all res already harvested? 
+			t1=p[mct].tierMaxResources;
 			
-			if((bc%4==0||bc%4==2)&&mw-woff>50*bl&&mo-soff>=50*bl&&mg-goff>=20*bl){
-				bt[ty][tx][0]='T';
-				mw=mw-(50*bl);mo=mo-(50*bl);mg=mg-(20*bl);
-				nb.push([tx,ty,1,mt[0][3],50*bl,50*bl,20*bl]);
-				bc++;bl=bl+0.5;
-				m.actions.push({"type" : 8,"units" : 1,"id" : mt[0][3]});
-				console.log("Try:"+JSON.stringify({"type" : 8,"units" : 1,"id" : mt[0][3]})+" X:"+tx+" Y:"+ty);
-			} else if(bc%4==1&&mw-woff>65*bf&&mo-soff>=65*bf&&mg-goff>=30*bf){
-				bt[ty][tx][0]='T';
-				mw=mw-(65*bf);mo=mo-(65*bf);mg=mg-(30*bf);
-				nb.push([tx,ty,1,mt[0][3],65*bf,65*bf,30*bf]);
-				bc++;bf=bf+0.5;
-				m.actions.push({"type" : 7,"units" : 1,"id" : mt[0][3]});
-				console.log("Try:"+JSON.stringify({"type" : 7,"units" : 1,"id" : mt[0][3]})+" X:"+tx+" Y:"+ty);
-			} else if(bc%4==3&&mw-woff>100*bq&&mo-soff>=100*bq&&mg-goff>=50*bq){
-				bt[ty][tx][0]='T';
-				mw=mw-(100*bq);mo=mo-(100*bq);mg=mg-(50*bq);
-				nb.push([tx,ty,1,mt[0][3],100*bq,100*bq,50*bq]);
-				bc++;bq=bq+0.5;
-				m.actions.push({"type" : 6,"units" : 1,"id" : mt[0][3]});
-				console.log("Try:"+JSON.stringify({"type" : 6,"units" : 1,"id" : mt[0][3]})+" X:"+tx+" Y:"+ty);
-			} else {
-				build=false;	
+			ns=(mo*-1);
+			ng=(mg*-1);
+			nw=(mw*-1);
+			
+			
+			for(k=fr.length-1;k>=0;k--){
+				if(fr[k][1]==4){nw=nw-fr[k][3];}
+				else if(fr[k][1]==2){
+					if(fr[k][4]=='S'){ns=ns-fr[k][3];}
+					else {ng=ng-fr[k][3];}
+				}
+				else {}
 			}
+			
+			nw=nw+t1.wood;
+			ns=ns+t1.stone;
+			ng=ng+t1.gold;
+			
+			
+			mineGD();
+			mineSN();
 		}
 	
-	console.log("Buildings:"+bc);	
+		//Step 7 - Farm Building Future (Gold and stone)
+		if(ma>0&&nb.length>0){
+				for(j = nb.length-1; j>=0; j--){
+					ns=ns+nb[j][5];
+					ng=ng+nb[j][6];
+					minr=r+nb[j][7];
+					mineGD();
+					mineSN();
+				}
+			}
+	
+		minr=0;	
+		//Step 8: Finish Wood Req above
+		if(ma>0){cut();}
+		
+	/*
+		if(ma>0&&nb.length>0){
+				for(j = nb.length-1; j>=0; j--){
+					nw=nw+nb[j][4];
+					minr=(cycle*10)+nb[j][7];
+					cut();
+				}
+			}
+		minr=0;	
+			*/
+	
+
+		//Step 9: If closest gathering will happen after my uptick, allow early harvest. Harvest evenly so that I have more build options
+		if(ma>0&&adv>0){
+				minr=(cycle+adv)*10+2;maxr=minr+7;
+			
+				if(gd.length>0){if(r+gd[0][5]>minr&&r+gd[0][5]<maxr){
+					ng=ng+p[mct+1].tierMaxResources.gold-p[mct].tierMaxResources.gold;
+					mineGD();console.log("FFI Gold");}}
+				if(sn.length>0){if(r+sn[0][5]>minr&&r+sn[0][5]<maxr){
+					ns=ns+p[mct+1].tierMaxResources.stone-p[mct].tierMaxResources.stone;
+					mineSN();console.log("FFI Stone");}}
+				if(wn.length>0){if(r+wn[0][5]>minr&&r+wn[0][5]<maxr){
+					nw=nw+p[mct+1].tierMaxResources.wood-p[mct].tierMaxResources.wood;
+					cut();console.log("FFI Wood");}}
+		}
 		
 		
+		minr=0;maxr=2499;
+	
+		//Step 9: If still have units left here, Stockpile Heat for the future
 		if(ma>0&&heatreq>0){
-		   nh=Math.ceil(mw-p[mct+1].tierResourceConstraints.wood*3); 
-		   if(nh>0){nw=nw+(Math.ceil(nh/5)*3);}	
 			
-		   wf=0; ww=0; wh=0; ws=0;
+			if(bphase==3&&mwood<500000&&mct==4){nh=Math.floor((mw-p[mct+2].tierResourceConstraints.wood-3)/3*5);}
+			else if(a>0||bphase<3||mwood<500000){nh=Math.floor((mw-p[mct+1].tierResourceConstraints.wood-3)/3*5);}
+			else {nh=Math.floor((mw-3)/3*5);}
 			
-		   burn();
+			burn();
+			
 		   cut();
 		   }
 		
-		
-		
-		
-		
-		for(i=1;i<=7;i++){
-			mp=Math.ceil(mp*1.05);
-			if(mp>=p[mct].maxPopulation){minr=(cycle+i)*10+2;
-										 
-										 nw=nw+p[mct+1].tierMaxResources.wood-tw;
-										 ns=ns+p[mct+1].tierMaxResources.stone-ts;
-										 ng=ng+p[mct+1].tierMaxResources.gold-tg;
-										 nf=nf+p[mct+1].tierMaxResources.food-tf;
-										
-										 wf=0; ww=0; wh=0; ws=0; wg=0;
-										 
-										 mineGD();
-										 mineSN();
-										 cut();
-										 farm();
-										 
-										 break;
-										}
+		//Step 10: If I still have units left here, Fill Food storages (Only Endgame for the sake of Starve)
+		if(ma>0&&r>2450){
+			nf=(mf*-1);
+			nf=nf+p[mct].tierMaxResources.food;
+			
+			for(k=fr.length-1;k>=0;k--){
+				if(fr[k][1]==3){nf=nf-fr[k][3];}
+				else {}
 			}
+			
+			farm();
+		}
 		
+		//1 Round delay on Farm Actions???
+			//Maybe. If true, Lets patch
+	
+		//Territory Play here???
+	
+		//Step 11: If still have units left here, Allow any future farming
+			////Loosen Future Farm maybe???
+			//Allow return on 1 
+		if(ma>0&&adv>0){
+				//console.log("Attempting Next Future Farm if still have units: "+adv+" try "+ma+" units");
+				minr=((cycle+adv+1)*10)+2;
+				
+				nw=nw+p[mct+1].tierMaxResources.wood-p[mct].tierMaxResources.wood;
+				ns=ns+p[mct+1].tierMaxResources.stone-p[mct].tierMaxResources.stone;
+				ng=ng+p[mct+1].tierMaxResources.gold-p[mct].tierMaxResources.gold;
+				
+
+				mineGD();
+				mineSN();
+				cut();
+		}
 		
+		//Still have units left here??
+			//Farm Everything thats left, Wood, Gold, Stone
+			//Essentially I am the ruler of the lands and all I can do now is slow others down.
+	
+		
+		//If still have Extra Units here... 
+			//Just hit all Wood to lower enemy farm capacity. 
+			//Add 500000 to my end farm and see how that ends for my Heat (Probably not best for 4v4, so check closely)
+			//Maybe add an extra 500 000 to my own heat requirements...
+			//Reason: If Im doing really well, adding more heat could be great. 
+		
+	//Set sabotage if still units left here instead.
+		//Will destroy them by making sure they cannot get the wood they need...
+		//Track enemy territory?
+	
+	//console.log("My Quadrent:"+quad);
+	
+	if(r>2498){
+		console.log("Tried to build:"+mbuild+" actually built:"+abuild);
+	}
+	
+	for(j = nb.length-1; j>=0; j--){
+		nb[j][7]=nb[j][7]-1;
+		if(nb[j][7]==0){nb.splice(j, 1);}
 		}
 	
-	sct--;
+	if(ma>0){
+		console.log("Available Units left after: "+ma);
+	}
+	
 	
 	if(m!=""){
 		connection.invoke("SendPlayerCommand", m);
-		//console.log(JSON.stringify(m));
+		if(r<500){console.log("Send Action", m);}
 		}
 	
-	console.timeEnd('tick');
 	
 });
 
@@ -517,105 +913,86 @@ function bR(td){
 
 
 function calcNeeds(){
-			nf=(mf*-1)-cf[0]-cf[1]-cf[2]-cf[3]-cf[4]-cf[5]-cf[6];
-			nh=(mh*-1);
-			ns=(mo*-1)-cs[0]-cs[1]-cs[2]-cs[3]-cs[4]-cs[5]-cs[6];
-			ng=(mg*-1)-cg[0]-cg[1]-cg[2]-cg[3]-cg[4]-cg[5]-cg[6];
-			nw=(mw*-1)-cw[0]-cw[1]-cw[2]-cw[3]-cw[4]-cw[5]-cw[6];
+			nf=(mf*-1);nh=(mh*-1);ns=(mo*-1);ng=(mg*-1);nw=(mw*-1);
 			
-			ts=0;tf=0;tw=0;tg=0;
+			for(k=fr.length-1;k>=0;k--){
+				if(fr[k][1]==4){nw=nw-fr[k][3];}
+				else if(fr[k][1]==2){
+					if(fr[k][4]=='S'){ns=ns-fr[k][3];}
+					else {ng=ng-fr[k][3];}
+				}
+				else if(fr[k][1]==3){nf=nf-fr[k][3];}
+				else {}
+			}
 		}
 
-//if in territory add statusnode to my mining power.
-	//Does not seem to affect my mining negatively
-
 function farm(){
-	for(i = 0; i<fn.length; i++){if(nf<1||ma<=0){break;}
+	wf=0;
+	for(i = 0; i<fn.length; i++){if(nf<1||ma<=0||starve){break;}
 		if(r+fn[i][5]<minr||r+fn[i][5]>maxr){continue;}
 		if(fn[i][1]==0||fn[i][3]==0){continue;}
-								 
-		if(bt[fn[i][7]][fn[i][6]][0]=='X'){tst=fst;}else{tst=0;}						 
-								 
-		if(fn[i][3]>nf){wf=Math.ceil(nf/(fn[i][2]+tst));}
-		else {wf=Math.ceil(fn[i][3]/(fn[i][2]+tst));}					 
+		if(fn[i][3]>nf){wf=Math.ceil(nf/fn[i][2]);}
+		else {wf=Math.ceil(fn[i][3]/fn[i][2]);}					 
 		if(ma<wf){wf=ma;}
 		if(fn[i][1]<wf){wf=fn[i][1];}					 
 		if(wf>0){m.actions.push({"type" : 3,"units" : wf,"id" : fn[i][0]});ma=ma-wf;
 							fn[i][3]=fn[i][3]-(wf*fn[i][2]);
-							nf=nf-(wf*(fn[i][2]+tst));
+							nf=nf-(wf*fn[i][2]);
 				 			fn[i][1]=fn[i][1]-wf;
-				 			
-				 			ncycle=Math.floor((r+fn[i][5])/10)-cycle;
-				 			cf[ncycle]=cf[ncycle]+(wf*(fn[i][2]+tst));
 				}
 	}
 }
 
 
 function cut(){
+	ww=0;
 	for(i = 0; i<wn.length; i++){if(nw<1||ma<=0){break;}
 		if(r+wn[i][5]<minr||r+wn[i][5]>maxr){continue;}
 		if(wn[i][1]==0||wn[i][3]==0){continue;}
-								 
-		if(bt[wn[i][7]][wn[i][6]][0]=='X'){tst=wst;}else{tst=0;}						 
-								 
-		if(wn[i][3]>nw){ww=Math.ceil(nw/(wn[i][2]+tst));}
-		else {ww=Math.ceil(wn[i][3]/(wn[i][2]+tst));}
+		if(wn[i][3]>nw){ww=Math.ceil(nw/wn[i][2]);}
+		else {ww=Math.ceil(wn[i][3]/wn[i][2]);}
 		if(ma<ww){ww=ma;}
 		if(wn[i][1]<ww){ww=wn[i][1];}
 		if(ww>0){m.actions.push({"type" : 4,"units" : ww,"id" : wn[i][0]});ma=ma-ww;
 				 			wn[i][3]=wn[i][3]-(ww*wn[i][2]);
-							nw=nw-(ww*(wn[i][2]+tst));
+							nw=nw-(ww*wn[i][2]);
 				 			wn[i][1]=wn[i][1]-ww;
-				 
-				 			ncycle=Math.floor((r+wn[i][5])/10)-cycle;
-				 			cw[ncycle]=cw[ncycle]+(ww*(wn[i][2]+tst));
 							}
-		
 	}
 }
 
+
 function mineSN(){
+	ws=0;
 	for(i = 0; i<sn.length; i++){if(ns<1||ma<=0){break;}
 		if(r+sn[i][5]<minr||r+sn[i][5]>maxr){continue;}
 		if(sn[i][1]==0||sn[i][3]==0){continue;}
-		
-		if(bt[sn[i][7]][sn[i][6]][0]=='X'){tst=sst;}else{tst=0;}							 
-								 
-		if(sn[i][3]>ns){ws=Math.ceil(ns/(sn[i][2]+tst));}
-		else {ws=Math.ceil(sn[i][3]/(sn[i][2]+tst));}
+		if(sn[i][3]>ns){ws=Math.ceil(ns/sn[i][2]);}
+		else {ws=Math.ceil(sn[i][3]/sn[i][2]);}
 		if(ma<ws){ws=ma;}
 		if(sn[i][1]<ws){ws=sn[i][1];}					 
 		if(ws>0){m.actions.push({"type" : 2,"units" : ws,"id" : sn[i][0]});ma=ma-ws;
 				 			sn[i][3]=sn[i][3]-(ws*sn[i][2]);
-							ns=ns-(ws*(sn[i][2]+tst));
+							ns=ns-(ws*sn[i][2]);
 				 			sn[i][1]=sn[i][1]-ws;
-				 
-				 			ncycle=Math.floor((r+sn[i][5])/10)-cycle;
-				 			cs[ncycle]=cs[ncycle]+(ws*(sn[i][2]+tst));
 							}
 		
 	}
 }
 
 function mineGD(){
+	wg=0;
 	for(i = 0; i<gd.length; i++){if(ng<1||ma<=0){break;}
 		if(r+gd[i][5]<minr||r+gd[i][5]>maxr){continue;}
 		if(gd[i][1]==0||gd[i][3]==0){continue;}
-								 
-		if(bt[gd[i][7]][gd[i][6]][0]=='X'){tst=gst;}else{tst=0;}							 
-								 
-		if(gd[i][3]>ng){wg=Math.ceil(ng/(gd[i][2]+tst));}
-		else {wg=Math.ceil(gd[i][3]/(gd[i][2]+tst));}
+		if(gd[i][3]>ng){wg=Math.ceil(ng/gd[i][2]);}
+		else {wg=Math.ceil(gd[i][3]/gd[i][2]);}
 		if(ma<wg){wg=ma;}
 		if(gd[i][1]<wg){wg=gd[i][1];}					 
 		if(wg>0){m.actions.push({"type" : 2,"units" : wg,"id" : gd[i][0]});ma=ma-wg;
 				 			gd[i][3]=gd[i][3]-(wg*gd[i][2]);
-							ng=ng-(wg*(gd[i][2]+tst));
+							ng=ng-(wg*gd[i][2]);
 				 			gd[i][1]=gd[i][1]-wg;
-				 
-				 			ncycle=Math.floor((r+gd[i][5])/10)-cycle;
-				 			cg[ncycle]=cg[ncycle]+(wg*(gd[i][2]+tst));
 							}
 		
 	}
@@ -623,7 +1000,8 @@ function mineGD(){
 
 
 function burn(){
-	if(nh>0&&mw>=3&&ma>0&&r<2490&&heatreq>0&&!starve){
+	wh=0;
+	if(nh>0&&mw>=3&&ma>0&&r<2490&&heatreq>0){
 		wh=Math.ceil(nh/5);
 		if(wh*3>mw){wh=Math.floor(mw/3);}
 		if(ma<wh){wh=ma;}
@@ -631,47 +1009,61 @@ function burn(){
 		ma=ma-wh;
 		nh=nh-(wh*5);
 		heatreq=heatreq-(wh*5);
-		mw=mw-wh;
+		mw=mw-(wh*3);
+		nw=nw+(wh*3);
 	}
 }
 
 function scout() {
-	if(sct<1){
-				for(i = 0; i<s.length; i++){if(ma==0||i>1){break;}m.actions.push({"type" : 1,"units" : 1,"id" : s[i][0]});ma--;sct=s[i][3];}
-		} 
+	if(!sct){for(i = 0; i<s.length; i++){if(ma==0){break;}m.actions.push({"type" : 1,"units" : 1,"id" : s[i][0]});ma--;}}
 }
 
 
-//Calculate score based on amount of nodes I can add in my own territory, 50% bonus for empty
-function calcScore(){
-	for(k=ty-2;k<=ty+2;k++){if(k<0||k>39){continue;}
-			for(i=tx-2;i<=tx+2;i++){if(i<0||i>39||i==k){continue;}
-				//if(bt[k][i][0]=='N'){tp=tp+0.5;} else 				  
-				if(bt[k][i][0]!='E'&&bt[k][i][0]!='T'){tp++;}//prioritize closest (faster building and better for own expanses)
-			}	
-		}		
-}
+//0,1 score for food or empty space
+		//if score < 1 dont allow building.
+		//Offset score, build towards center
+		//check my quodrent and if x falls towards center, add 2 bonus points (if tp>1 already)
+	//Build Phase 1
 
+		//Ignore diagonal zone behind base.
+		//That territory is out of reach of opponents, so I can grab them later, Better to fight for more central territory when the match starts
 
-//Building Cost:
-	//private static int GetBuildingCost(int numberOfBuildingsPerType, int cost) => (numberOfBuildingsPerType * cost) / 2;
-
-	//Set initial cost. 
-		//Count all buildings
-		//Recalc Cost
-		//No limit on building. Happens pretty instant
-		//Will anyways not retry build. Maybe limit build to 1 per turn on cheapest building.
+	//Run Variation where the back is merely penelized. 
+		//Could created cases where it will still fix some problems in my builds
 	
-	//Rebalance my mining and see how it impacts Rewards???
-
-//How does it impact my resources???
-	//Score Multiplier -> just a small increase to score at the end.
-	//Population is worth more. Keep in mind...
-
-//??Statud Effect Multiplier
-	//Calculate Amount Extracted
-	//Seems to be if node is in my territory, Add status modifier to my farm (per unit)
-
-//check if status effect auto applies... only play 16 buildings at first
+	//Impliment buildings as new marker...
+		//Rework calcscore??
+		//Test nb...
 
 
+	//If build phase == 3 (Make sure I have my stone and Gold, Starve all from Stone and Gold)
+		//Push Lumber
+		//Choke out of Advancement???
+var iq;
+function calcScore(ti){
+	tp=0;
+	for(k=ty-ti;k<=ty+ti;k++){if(k<0||k>39){continue;}
+			for(i=tx-ti;i<=tx+ti;i++){if(i<0||i>39||i==k){continue;}
+				iq=false;
+				if(quad=="SE"&&i-mx+k-my>-2){iq=true;}
+				if(quad=="NW"&&mx-i+my-k>-2){iq=true;}	
+				if(quad=="NE"&&i-mx+my-k>-2){iq=true;}	
+				if(quad=="SW"&&mx-i+k-my>-2){iq=true;}				 
+				
+				if(bphase==1&&iq){continue;}	
+									  
+				t1=bt[k][i][0];
+				np=0;
+				if(t1=='F'||t1=='N'||t1=='W'||t1=='S'||t1=='G'){np=np+1;}		
+				if(t1=='W'){np=np+1;}
+				if(t1=='S'||t1=='G'){np=np+3;}
+									  
+				if(bphase==1&&iq){np=np/3;}	
+				tp=tp+np;
+			}	
+		}
+	
+	if(tp<=ti*3){tp=0;}
+	
+	return tp;
+}	

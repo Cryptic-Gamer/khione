@@ -16,7 +16,7 @@ var mx, my, ma, mp, ms, mct, mrn=0, mid; //x,y,available,population, scout, tier
 var sct=false;
 
 var en=[];
-var heatreq=14000000;//Make sure this works
+var heatreq=14500000;//Make sure this works
 
 const connection = new signalR.HubConnectionBuilder().withUrl(url).configureLogging(signalR.LogLevel.Information).build();
 
@@ -58,6 +58,9 @@ var starve=false;
 
 
 var fr=[]; //Future Resources
+var offw, offg, offs;//offset FR and account for Advancements (Had an issue where I would see more stone than I can farm because of lumber expantions that caused a lot of chaos in my build strat)
+var offwx, offgx, offsx;
+
 var cycle=0;
 var minr,maxr;
 var cbuild = true;
@@ -105,17 +108,17 @@ for(i=0;i<40;i++){
 var nb=[], rem, build=[], canbuild=[];
 var fst, mst, wst; //Res Status, temp status
 var wr,gr,sr;
-var adv;
+var adv, advr;
 var bphase=1;
 
 var quad="";
 
 //build Array - Building, amount modifier, total cost, territory weight, size (according to the MT array), build time
-build.push(['L', 1, 40, 15, 0, 1, 9, 5]);
-build.push(['O', 1, 220, 110, 0, 3, 49, 10]);
-build.push(['F', 1, 50, 25, 0, 2, 25, 5]);
-build.push(['Q', 1, 90, 45, 0, 2, 25, 5]);
 build.push(['R', 1, 50, 35, 0, 1, 9, 2]);
+build.push(['Q', 1, 90, 45, 0, 2, 25, 5]);
+build.push(['F', 1, 50, 25, 0, 2, 25, 5]);
+build.push(['O', 1, 220, 110, 0, 3, 49, 10]);
+build.push(['L', 1, 40, 15, 0, 1, 9, 5]);
 
 var t1, t2, t3, t4, t5, tcomp; //temporary variables for performance boosts
 var mwood, mstone, mgold;
@@ -133,6 +136,7 @@ connection.on("ReceiveBotState", gameState => {
 	
 	
 	cycle=Math.floor(r/10);
+	if(r%10==0){cycle--;}
 	
 	if(r==1){
 		
@@ -179,7 +183,20 @@ connection.on("ReceiveBotState", gameState => {
 	mg=b[mid].gold;
 	mct=b[mid].currentTierLevel;
 	
-	abuild=-1;
+	//Test a variation where we check Mo an MG and factor in already built buildings
+	mp=b[mid].population;
+	adv=0;for(i=1;i<=6;i++){
+		if(mp<30516){mp=Math.ceil(mp*1.05);}
+		else {mp=Math.ceil(mp*1.03);}
+		if(mp>=p[mct].maxPopulation){adv=i;break;}
+	}
+	mp=b[mid].population;
+	
+	if(adv>0){advr=((cycle+adv)*10);}
+	else {advr=5000;}
+	
+	
+	abuild=0;
 	
 	//Try fetch building costs directly from bot data
 	for(i=build.length-1;i>=0;i--){build[i][1]=1;
@@ -191,6 +208,8 @@ connection.on("ReceiveBotState", gameState => {
 			   (build[i][0]=='R'&&b[mid].buildings[j].type==10)){abuild++;build[i][1]=build[i][1]+0.5;}
 		}						  
 	}
+	
+	//console.log(JSON.stringify(b[mid].buildings));
 	
 	fst=b[mid].statusMultiplier.foodReward;
 	mst=b[mid].statusMultiplier.goldReward;
@@ -209,7 +228,6 @@ connection.on("ReceiveBotState", gameState => {
 		}
 		else if(tn.actionType==5){mw=mw-(Math.ceil(tn.numberOfUnits*3));mh=mh+(Math.ceil(tn.numberOfUnits/3)*5);}
 		else if(tn.actionType>5){
-		
 			for(j=build.length-1;j>=0;j--){
 				if((build[j][0]=='L'&&tn.actionType==8)||
 			   (build[j][0]=='F'&&tn.actionType==7)||
@@ -223,22 +241,30 @@ connection.on("ReceiveBotState", gameState => {
 			fr.push([tn.targetNodeId, tn.actionType, tn.numberOfUnits, 0, "", tn.tickActionCompleted]);
 		}
 	}
+
 	
-	
-	
-	//Can I see enemy pending actions? 
-		//Look and if I can counter build...
-		//Future Farm Buildings (Or Try...)
-		//Maximize build speed early will be the ultimate strategy...
+	for(j = nb.length-1; j>=0; j--){
+		t1=true;
+		for(i = 0; i<b[mid].actions.length; i++){
+			tn=b[mid].actions[i];
+			if(tn.actionType>5&&tn.targetNodeId==nb[j][3]){t1=false;}
+		}
+		if(t1){nb.splice(j, 1);}
+		else{nb[j][7]=nb[j][7]-1;}
+		}
 	
 	t=b[mid].territory;
 	
 	cbuild=true;
+	
+	//Calculate max FR this adv
+		//Calculate Bonus FR (Next FR)
+		//Only add this adv to all checks
+		//Add bonus FR to any future farm or buildings that will complete in that
 		
-	//Test a variation where we check Mo an MG and factor in already built buildings
-	mp=b[mid].population;
-	adv=0;for(i=1;i<=6;i++){mp=Math.ceil(mp*1.05);if(mp>=p[mct].maxPopulation){adv=i;break;}}
-	mp=b[mid].population;
+	
+	
+	
 	
 	//Build Strategy
 		//Phase 1: Max territory Grab
@@ -408,12 +434,41 @@ connection.on("ReceiveBotState", gameState => {
 					}
 	
 	for(k=fr.length-1;k>=0;k--){
-		for(j=wn.length-1;j>=0;j--){if(wn[j][0]==fr[k][0]){fr[k][3]=fr[k][2]*wn[j][2];mwood=mwood+fr[k][3];}}
+		for(j=wn.length-1;j>=0;j--){if(wn[j][0]==fr[k][0]){fr[k][3]=fr[k][2]*wn[j][2];}}
 		for(j=fn.length-1;j>=0;j--){if(fn[j][0]==fr[k][0]){fr[k][3]=fr[k][2]*fn[j][2];}}
 		for(j=sn.length-1;j>=0;j--){if(sn[j][0]==fr[k][0]){fr[k][3]=fr[k][2]*sn[j][2];fr[k][4]='S';}}
 		for(j=gd.length-1;j>=0;j--){if(gd[j][0]==fr[k][0]){fr[k][3]=fr[k][2]*gd[j][2];fr[k][4]='G';}}
 	}
 	
+	offw=0; offg=0; offs=0;
+	offwx=0; offgx=0; offsx=0;
+	
+	for(k=fr.length-1;k>=0;k--){
+		
+		if(fr[k][5]<=advr){
+			if(fr[k][1]==4){offw=offw+fr[k][3];}
+				else if(fr[k][1]==2){
+					if(fr[k][4]=='S'){offs=offs+fr[k][3];}
+					else {offg=offg+fr[k][3];}
+				}
+				else {}
+		} else {
+			if(fr[k][1]==4){offwx=offwx+fr[k][3];}
+				else if(fr[k][1]==2){
+					if(fr[k][4]=='S'){offsx=offsx+fr[k][3];}
+					else {offgx=offgx+fr[k][3];}
+				}
+				else {}
+		}	
+			}
+	t1=p[mct].tierMaxResources;
+	if(mw+offw>t1.wood){offw=t1.wood-mw;}
+	if(mo+offs>t1.wood){offs=t1.stone-mo;}
+	if(mg+offg>t1.wood){offg=t1.gold-mg;}
+	   
+	console.log("Offsets Current: offw"+offw+" offs"+offs+" offg"+offg+" offwx"+offwx+" offsx"+offsx+" offgx"+offgx);
+	
+	mwood=mwood+offw+offwx;
 	
 	wn.sort(function(a,b){return b[4]-a[4]});
 	fn.sort(function(a,b){return b[4]-a[4]});
@@ -445,18 +500,17 @@ connection.on("ReceiveBotState", gameState => {
 	
 	//Try running Woodsup only on nodes in own territory but set to 200 000
 	
+	//set starve to 
+	
+	//Set 
+	
 	starve=false;
 	if(bphase==3&&mwood<200000){
 		i=cycle;
 		j=mp;
 		t1=mf;
 		t2=0;
-		t3=mw;
-		
-		for(k=fr.length-1;k>=0;k--){
-				if(fr[k][1]==4){t3=t3+fr[k][3];}
-				else {}
-			}
+		t3=mw+offw+offwx;
 		
 		nh=mh+(Math.floor(t3/3*5));
 		for(i=cycle;i<250;i++){
@@ -590,18 +644,11 @@ connection.on("ReceiveBotState", gameState => {
 				gr=gr-t1.gold-1;
 				sr=sr-t1.stone-1;
 			   }
-			
-			//Consider doing res +2 like with heat generation.
-				//If mct==4
-			
-			
-			//Very Important...
-				//Allow build with FR as long as FR will arrive before building completion
-				//bt[ty][tx][1]+build[j][7]+1
-				//As new building will create an NB offset it should be fine. 
-			
+		
 			//Readjust offsets from already built buildings
 			for(i = nb.length-1; i>=0; i--){wr=wr-nb[i][4];sr=sr-nb[i][5];gr=gr-nb[i][6]; }
+			
+			
 			
 			if(bphase<3){console.log("Can Build Wood:"+wr+" Stone:"+sr+" Gold:"+gr);}
 			
@@ -613,14 +660,11 @@ connection.on("ReceiveBotState", gameState => {
 			//Building Phase 1
 			
 			//build.sort(function (a, b){return a[5]-b[5];});
-			if(build[0][0]=='L'&&build[0][1]==1){canbuild=['L'];}
-			else if(bphase==1){canbuild=['L', 'F', 'Q', 'O', 'R'];} //Fastest territory
-			else if(bphase==2){canbuild=['L', 'F', 'Q'];}//Just Lumber, Farm Quarry //Cheapest territory
+			if(build[4][0]=='L'&&build[4][1]==1){canbuild=['L'];}
+			else if(bphase==1){canbuild=['R', 'O', 'Q', 'F', 'L'];} //Fastest territory
+			else if(bphase==2){canbuild=['Q', 'F', 'L'];}//Just Lumber, Farm Quarry //Cheapest territory
 			else if(bphase==3){canbuild=['L'];}//Just lumber, No sort
 			else {}
-			
-			
-			
 			
 			//console.log("Build:"+JSON.stringify(build));
 			console.log("Can Build:"+JSON.stringify(canbuild));
@@ -648,20 +692,11 @@ connection.on("ReceiveBotState", gameState => {
 				//Cheapest Expand
 					//build.sort(function (a, b){return a[4]-b[4];});
 				
-				//Sticking to a fixed sequence for expanding. 
-					//Reason is: Though Lumber and Road are small
-					//Dropping a 1 range building exposes some more land for the 2 range one. 
-					//So longterm its slightly faster expantions 
-						//Charting the expantions:
-						//Food - Lumber on home tile gives +16 food and the +5 Lumber
-						//Lumber - Food on home tile gives +5 lumber and then
-				
-			
 				
 			for(j = build.length-1; j>=0; j--){if(mt.length==0){if(nb.length==0){bphase++;}break;}
 				t1=build[j][0];	
 				
-				for(i=canbuild.length-1;i>=0;i--){if(canbuild[i]==t1){						   
+				for(i=canbuild.length-1;i>=0;i--){if(canbuild[i]==t1){	
 					t2=build[j][1];	
 					t3=build[j][2];	
 					t4=build[j][3];	
@@ -669,9 +704,10 @@ connection.on("ReceiveBotState", gameState => {
 
 					mt.sort(function (a, b){return b[t5+2]-a[t5+2];});
 					if(mt[0][t5+2]==0){continue;}
-
+					
 					tx=mt[0][0];ty=mt[0][1];tid=mt[0][2];	
 					tcomp=bt[ty][tx][1]+build[j][7];
+					
 					twr=wr;tsr=sr;tgr=gr;
 
 					for(k=fr.length-1;k>=0;k--){
@@ -683,9 +719,17 @@ connection.on("ReceiveBotState", gameState => {
 							}
 							else {}
 						}
-					}						   
-
-
+					}	
+					
+					if(tcomp+r<advr){
+						if(tgr>p[mct].tierMaxResources.gold){tgr=p[mct].tierMaxResources.gold;}
+						if(twr>p[mct].tierMaxResources.wood){twr=p[mct].tierMaxResources.wood;}
+						if(tsr>p[mct].tierMaxResources.stone&&build[4][1]>1){tsr=p[mct].tierMaxResources.stone;}
+					}
+					
+					console.log("ADVR:"+advr+" tcomp+r"+(tcomp+r));
+					console.log("Trying:"+canbuild[i]+" End Vars: twr-"+twr+" t3*t2-"+(t3*t2)+" tsr-"+tsr+" t3*t2-"+(t3*t2)+" tgr-"+tgr+" t4*t2-"+(t4*t2));
+					
 					if(twr>t3*t2&&tsr>=t3*t2&&tgr>=t4*t2){mbuild++;
 
 						bt[ty][tx][0]='T';
@@ -728,68 +772,54 @@ connection.on("ReceiveBotState", gameState => {
 			//Account for all res already harvested? 
 			t1=p[mct].tierMaxResources;
 			
-			ns=(mo*-1);
-			ng=(mg*-1);
-			nw=(mw*-1);
+			ns=(mo*-1)-offs;
+			ng=(mg*-1)-offg;
+			nw=(mw*-1)-offw;
 			
-			
-			for(k=fr.length-1;k>=0;k--){
-				if(fr[k][1]==4){nw=nw-fr[k][3];}
-				else if(fr[k][1]==2){
-					if(fr[k][4]=='S'){ns=ns-fr[k][3];}
-					else {ng=ng-fr[k][3];}
-				}
-				else {}
-			}
+			console.log("NS Start:"+ns);
 			
 			nw=nw+t1.wood;
 			ns=ns+t1.stone;
 			ng=ng+t1.gold;
 			
+			console.log("NS Change:"+ns);
 			
 			mineGD();
 			mineSN();
 		}
 	
 		//Step 7 - Farm Building Future (Gold and stone)
+	console.log("NB Status "+JSON.stringify(nb));
+	
 		if(ma>0&&nb.length>0){
 				for(j = nb.length-1; j>=0; j--){
 					ns=ns+nb[j][5];
+					console.log("NS Change:"+ns);
 					ng=ng+nb[j][6];
 					minr=r+nb[j][7];
 					mineGD();
 					mineSN();
 				}
 			}
+		
+		//Only Future Farm building from best stone supply...
 	
 		minr=0;	
 		//Step 8: Finish Wood Req above
 		if(ma>0){cut();}
-		
-	/*
-		if(ma>0&&nb.length>0){
-				for(j = nb.length-1; j>=0; j--){
-					nw=nw+nb[j][4];
-					minr=(cycle*10)+nb[j][7];
-					cut();
-				}
-			}
-		minr=0;	
-			*/
-	
 
 		//Step 9: If closest gathering will happen after my uptick, allow early harvest. Harvest evenly so that I have more build options
 		if(ma>0&&adv>0){
 				minr=(cycle+adv)*10+2;maxr=minr+7;
-			
+				
 				if(gd.length>0){if(r+gd[0][5]>minr&&r+gd[0][5]<maxr){
-					ng=ng+p[mct+1].tierMaxResources.gold-p[mct].tierMaxResources.gold;
+					ng=ng-offgx;ng=ng+p[mct+1].tierMaxResources.gold-p[mct].tierMaxResources.gold;
 					mineGD();console.log("FFI Gold");}}
 				if(sn.length>0){if(r+sn[0][5]>minr&&r+sn[0][5]<maxr){
-					ns=ns+p[mct+1].tierMaxResources.stone-p[mct].tierMaxResources.stone;
+					ns=ns-offsx;ns=ns+p[mct+1].tierMaxResources.stone-p[mct].tierMaxResources.stone;
 					mineSN();console.log("FFI Stone");}}
 				if(wn.length>0){if(r+wn[0][5]>minr&&r+wn[0][5]<maxr){
-					nw=nw+p[mct+1].tierMaxResources.wood-p[mct].tierMaxResources.wood;
+					nw=nw-offgx;nw=nw+p[mct+1].tierMaxResources.wood-p[mct].tierMaxResources.wood;
 					cut();console.log("FFI Wood");}}
 		}
 		
@@ -833,6 +863,10 @@ connection.on("ReceiveBotState", gameState => {
 				//console.log("Attempting Next Future Farm if still have units: "+adv+" try "+ma+" units");
 				minr=((cycle+adv+1)*10)+2;
 				
+				ng=ng-offgx;
+				nw=nw-offgx;
+				ns=ns-offgx;
+			
 				nw=nw+p[mct+1].tierMaxResources.wood-p[mct].tierMaxResources.wood;
 				ns=ns+p[mct+1].tierMaxResources.stone-p[mct].tierMaxResources.stone;
 				ng=ng+p[mct+1].tierMaxResources.gold-p[mct].tierMaxResources.gold;
@@ -860,14 +894,8 @@ connection.on("ReceiveBotState", gameState => {
 	
 	//console.log("My Quadrent:"+quad);
 	
-	if(r>2498){
-		console.log("Tried to build:"+mbuild+" actually built:"+abuild);
-	}
 	
-	for(j = nb.length-1; j>=0; j--){
-		nb[j][7]=nb[j][7]-1;
-		if(nb[j][7]==0){nb.splice(j, 1);}
-		}
+	console.log("Tried to build:"+mbuild+" actually built:"+abuild);
 	
 	if(ma>0){
 		console.log("Available Units left after: "+ma);
@@ -876,7 +904,8 @@ connection.on("ReceiveBotState", gameState => {
 	
 	if(m!=""){
 		connection.invoke("SendPlayerCommand", m);
-		if(r<500){console.log("Send Action", m);}
+		t1={"playerId" : bi,"actions" : []};
+		if(r>450&&r<750&&m!=t1){console.log("Send Action", m);}
 		}
 	
 	
@@ -913,17 +942,8 @@ function bR(td){
 
 
 function calcNeeds(){
-			nf=(mf*-1);nh=(mh*-1);ns=(mo*-1);ng=(mg*-1);nw=(mw*-1);
-			
-			for(k=fr.length-1;k>=0;k--){
-				if(fr[k][1]==4){nw=nw-fr[k][3];}
-				else if(fr[k][1]==2){
-					if(fr[k][4]=='S'){ns=ns-fr[k][3];}
-					else {ng=ng-fr[k][3];}
-				}
-				else if(fr[k][1]==3){nf=nf-fr[k][3];}
-				else {}
-			}
+			nf=(mf*-1);nh=(mh*-1);ns=(mo*-1)-offs;ng=(mg*-1)-offg;nw=(mw*-1)-offw;
+			for(k=fr.length-1;k>=0;k--){if(fr[k][1]==3){nf=nf-fr[k][3];}}
 		}
 
 function farm(){
@@ -975,6 +995,7 @@ function mineSN(){
 				 			sn[i][3]=sn[i][3]-(ws*sn[i][2]);
 							ns=ns-(ws*sn[i][2]);
 				 			sn[i][1]=sn[i][1]-ws;
+				 			console.log("Trying to Mine "+ws*sn[i][2]+" stone");
 							}
 		
 	}

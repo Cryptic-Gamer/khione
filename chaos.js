@@ -69,31 +69,17 @@ var cbuild = true;
 
 var mbuild=0, abuild;
 
-//To do, 
-	//Build Phase 2:
-	//Calculate Impact of building Lumbermill on wood in own territory
-	//Calculate Unit Save
-	//If works out well, do the same with Farms
-	//Ignore Stone and gold (Too little accross the map)
-
 //More Lumbermills will free up more units  for Territory Conquest
 	
-//For Expantion, Try and expand in a 90 degree radius towards the center. 
+//For Expantion, Try and expand towards the center. 
 	//Everyone is limited by expand speed, 
-	//But if I can expand towards the center I can grab whats behind me later on. 
+	//But if I can expand towards the center first I can grab whats behind me later on. Even if I get flanked I can just grab territory in my own quadrent
 	//Territorial advantage can only be combat by other bots through takeover. 
 	//Takeover reduces Heat 
 
-//Thought, what if I take a resource node before enemy farms it...
-	//Account for the protection offset (only 70% received).
-	
-//Test Territory Dominance VS Heat Generation (Test by flipping heat gen and takeover around)
-
-//Set 3 Dimentional Build? 
-	//Calculate best possible build based on next 3 buildings
-	//Monte Carlo tree search maybe
-	//Extra points for more central tiles...
-	//More points the further away from me. 
+//Always prioritize Heat and Lumber. 
+	//Observations are that as I get my lumber sorted, I cant overfarm Wood and end with lots of free units. 
+	//those Units can takeover
 
 var bt=[];//Node State, score, distance, boosted
 //Add var bt as well if we get second building
@@ -120,6 +106,7 @@ build.push(['F', 1, 50, 25, 0, 2, 25, 5]);
 build.push(['O', 1, 220, 110, 0, 3, 49, 10]);
 build.push(['L', 1, 40, 15, 0, 1, 9, 5]);
 
+
 var t1, t2, t3, t4, t5, tcomp; //temporary variables for performance boosts
 var mwood, mstone, mgold;
 var twr,tsr,tgr;	
@@ -129,6 +116,8 @@ connection.on("ReceiveBotState", gameState => {
 	w=gameState.world;
 	a=w.map.availableNodes;
 	b=gameState.bots;
+	
+	if(r==1){console.log(JSON.stringify(gameState));}
 	
 	
 	r=w.currentTick;
@@ -257,36 +246,39 @@ connection.on("ReceiveBotState", gameState => {
 	
 	cbuild=true;
 	
-	//Calculate max FR this adv
-		//Calculate Bonus FR (Next FR)
-		//Only add this adv to all checks
-		//Add bonus FR to any future farm or buildings that will complete in that
-		
-	
-	
-	
-	
-	//Build Strategy
-		//Phase 1: Max territory Grab
-		//Phase 2: Once I own Max territory, Calculate if its worth Building remaining Structures for Speed Boost
-			//Allow Lumber if number of units required to build is < the cost of building the structure
-			//Allow food if the unit savings till end game < the cost of building
-				//In both cases use buildings as a possible wall. 
-		
 		//For Territory
-			//Phase 1 try and grab any Wood lots with resources. 
+			//Phase 1 try and grab any Wood lots with resources.
 				//Try and do this before I burn extra Heat even???
 				//Try and expand and take resource nodes???
 				//Resource Nodes should be easy to keep
+		
+		//Right before heat
+	
+		//Territory Strategy
+			//Phase 1: Try and defend own quadrent (Retain - Res only)
+			//Phase 2: Try and take own quadrent (Aim to land on a %9 tick)
 			
+		//At the very end if still have units
+	
+		//Territory Strategy
+			//Phase 3: Try and take woodnode all (If has res)
+			//Phase 4: Try and take closestnodes all
+			//Phase 5: Reinforce Closest Wood (If has res)
+			//Phase 6: Reinforce nodes that still have wood (Protect)
+			
+		//Withdrawal strat
+			//Calc if node is important (A res node)
+			//Else if own node, withdraw
+			
+		
+		
+	
+	
 		//What is the winning FActor? 
 			//Still heat...
 			//It was always about heat and the starve function...
 			//In the finals undoubtedly the 4v4 will destroy resources on the map, and start fighting over territory. 
-			//One possibility is that I only defend my own territory, spend the bare minimum towards offense. 
-			//Endgame will be extremely fast in the top 8. So rushing towards my heat requirements might be the best play (While others perhaps apply efforts to controlling Resource Nodes). 
-			//Towards the end I will still have extra units. But it should be far better to just work on spending all Wood in my own territory.
-			//Defence will be cheaper than offence. and losing some nodes will not matter either (Ignore empty and food nodes) (but dont ignore food nodes closeby)
+			//Defence will be cheaper than offence.
 			//Neither Should I ignore Wood Nodes in the distance
 				
 	
@@ -590,36 +582,11 @@ connection.on("ReceiveBotState", gameState => {
 			farm();
 		}
 		
-		//Step 5: Do the most optimum wood expansion
-			//Save Outposts for central expantions maybe...
-			//Maybe try and force central expantions anyways. Could possibly be improved on. But unlocking most Wood might be the key to get my Population Maxed anyways. 
-			//Then even if i dont get to the center first, It might not matter. 
-			//That said, I do want some kind of Quadrant offset at least gamestart. 
-				//In gamestart where I build will not matter much, as I will not deplete
+		//Step 5: Build for territory as best I can
 		
-		//Test for Resource Overhead
-			//Set max to 80% and see if my bot spills...
-			//Best testcase
-
-		
-		//Build Phase 1
-			//Check my quadrent
-			//Ignore tiles behind me from expantion Scoring
-		
-		//Build Phase 2
-			//Fill up Quadrent, 
-			//Dont allow building Roads here (Roads only for early speed)
-	
 		//Build Phase 3
 			//calculate the advantage that building would give (Speed boost)
 			//if unit advantage exceeds replacement costs - build
-		
-		//if base in other territpory (Math.round 70% oddset)
-			
-		
-		//Force Build Phase 1 largest first (order by size)
-		//Force Build Phase 2 Lumber, Farm, Quarry only
-		//Force Build Phase 3 Lumber Only if it will give me a decent unit saving on farming my remaining res
 		
 		
 		//set and calculate an afford variable
@@ -692,11 +659,11 @@ connection.on("ReceiveBotState", gameState => {
 				//Cheapest Expand
 					//build.sort(function (a, b){return a[4]-b[4];});
 				
-				
-			for(j = build.length-1; j>=0; j--){if(mt.length==0){if(nb.length==0){bphase++;}break;}
-				t1=build[j][0];	
-				
-				for(i=canbuild.length-1;i>=0;i--){if(canbuild[i]==t1){	
+			for(i=canbuild.length-1;i>=0;i--){if(mt.length==0){if(nb.length==0){bphase++;}break;}	
+				for(j = build.length-1; j>=0; j--){
+					if(canbuild[i]==build[j][0]){								   
+												   
+					t1=build[j][0];	
 					t2=build[j][1];	
 					t3=build[j][2];	
 					t4=build[j][3];	
@@ -727,14 +694,13 @@ connection.on("ReceiveBotState", gameState => {
 						if(tsr>p[mct].tierMaxResources.stone&&build[4][1]>1){tsr=p[mct].tierMaxResources.stone;}
 					}
 					
-					console.log("ADVR:"+advr+" tcomp+r"+(tcomp+r));
 					console.log("Trying:"+canbuild[i]+" End Vars: twr-"+twr+" t3*t2-"+(t3*t2)+" tsr-"+tsr+" t3*t2-"+(t3*t2)+" tgr-"+tgr+" t4*t2-"+(t4*t2));
 					
 					if(twr>t3*t2&&tsr>=t3*t2&&tgr>=t4*t2){mbuild++;
 
 						bt[ty][tx][0]='T';
 
-						nb.push([tx,ty,build[j][5],tid,t3*t2,t3*t2,t4*t2,tcomp+1]);
+						nb.push([tx,ty,build[j][5],tid,t3*t2,t3*t2,t4*t2,tcomp+1,t3*t2,t4*t2]);
 														  
 						ma--;
 
@@ -753,7 +719,7 @@ connection.on("ReceiveBotState", gameState => {
 						if(t1=='R'){m.actions.push({"type" : 10,"units" : 1,"id" : tid});
 							console.log("Build:"+JSON.stringify({"type" : 10,"units" : 1,"id" : tid})+" X:"+tx+" Y:"+ty);}
 
-						j=-1;break;
+						i=-1;break;
 						} 
 
 				}
@@ -784,21 +750,35 @@ connection.on("ReceiveBotState", gameState => {
 			
 			console.log("NS Change:"+ns);
 			
-			mineGD();
 			mineSN();
+			mineGD();
 		}
 	
 		//Step 7 - Farm Building Future (Gold and stone)
-	console.log("NB Status "+JSON.stringify(nb));
+		console.log("NB Status "+JSON.stringify(nb));
+	
+		//Lets Future Farm only chosen once for every building
 	
 		if(ma>0&&nb.length>0){
 				for(j = nb.length-1; j>=0; j--){
-					ns=ns+nb[j][5];
-					console.log("NS Change:"+ns);
-					ng=ng+nb[j][6];
-					minr=r+nb[j][7];
-					mineGD();
-					mineSN();
+					minr=r+nb[j][7]+1;
+					if(ns<=0&&ns+nb[j][8]>0){
+						ns=ns+nb[j][8];
+						console.log("FF Build Stone:"+ns);
+						mineSN();
+						if(ns<0){ns=0;}
+						nb[j][8]=ns;
+					}
+					
+					if(ng<=0&&+ng+nb[j][9]>0){
+						ng=ng+nb[j][9];
+						console.log("FF Build Gold:"+ng);
+						mineGD();
+						if(ng<0){ng=0;}
+						nb[j][8]=ng;
+					}
+					
+					
 				}
 			}
 		
@@ -812,12 +792,12 @@ connection.on("ReceiveBotState", gameState => {
 		if(ma>0&&adv>0){
 				minr=(cycle+adv)*10+2;maxr=minr+7;
 				
-				if(gd.length>0){if(r+gd[0][5]>minr&&r+gd[0][5]<maxr){
-					ng=ng-offgx;ng=ng+p[mct+1].tierMaxResources.gold-p[mct].tierMaxResources.gold;
-					mineGD();console.log("FFI Gold");}}
 				if(sn.length>0){if(r+sn[0][5]>minr&&r+sn[0][5]<maxr){
 					ns=ns-offsx;ns=ns+p[mct+1].tierMaxResources.stone-p[mct].tierMaxResources.stone;
 					mineSN();console.log("FFI Stone");}}
+				if(gd.length>0){if(r+gd[0][5]>minr&&r+gd[0][5]<maxr){
+					ng=ng-offgx;ng=ng+p[mct+1].tierMaxResources.gold-p[mct].tierMaxResources.gold;
+					mineGD();console.log("FFI Gold");}}
 				if(wn.length>0){if(r+wn[0][5]>minr&&r+wn[0][5]<maxr){
 					nw=nw-offgx;nw=nw+p[mct+1].tierMaxResources.wood-p[mct].tierMaxResources.wood;
 					cut();console.log("FFI Wood");}}
@@ -871,9 +851,9 @@ connection.on("ReceiveBotState", gameState => {
 				ns=ns+p[mct+1].tierMaxResources.stone-p[mct].tierMaxResources.stone;
 				ng=ng+p[mct+1].tierMaxResources.gold-p[mct].tierMaxResources.gold;
 				
-
-				mineGD();
 				mineSN();
+				mineGD();
+				
 				cut();
 		}
 		
@@ -995,7 +975,6 @@ function mineSN(){
 				 			sn[i][3]=sn[i][3]-(ws*sn[i][2]);
 							ns=ns-(ws*sn[i][2]);
 				 			sn[i][1]=sn[i][1]-ws;
-				 			console.log("Trying to Mine "+ws*sn[i][2]+" stone");
 							}
 		
 	}

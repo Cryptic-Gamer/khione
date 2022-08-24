@@ -1005,7 +1005,7 @@ connection.on("ReceiveBotState", gameState => {
 		conquest(teOtherO);
 		conquest(teOtherQ);	
 		
-		if(ma>0&&ma>2000){
+		if(ma>0&&ma>2000&&r<2450){
 			
 			teWoodQ.sort(function(a,b){return b[7]-a[7]});
 			teOtherQ.sort(function(a,b){return b[7]-a[7]});	

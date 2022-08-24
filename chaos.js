@@ -244,6 +244,10 @@ connection.on("ReceiveBotState", gameState => {
 	}
 
 	
+	//Loop All Actions and offset nodes
+	
+	
+	
 	for(j = nb.length-1; j>=0; j--){
 		t1=true;
 		for(i = 0; i<b[mid].actions.length; i++){
@@ -270,7 +274,7 @@ connection.on("ReceiveBotState", gameState => {
 					}
 			}
 			
-			t.push([t1[j].y, t1[j].x, t1[j].nodeOnLand, myp, myc, ep, ec, bt[t1[j].y][t1[j].x][1]]);
+			t.push([t1[j].y, t1[j].x, t1[j].nodeOnLand, myp, myc, ep, ec, bt[t1[j].y][t1[j].x][1], 0]);
 			} 
 	
 	//console.log("My Borders:"+JSON.stringify(t));
@@ -287,13 +291,29 @@ connection.on("ReceiveBotState", gameState => {
 				if(t2[k].botId==b[i].id){ep=t2[k].pressure;ec=t2[k].count;}
 				if(t2[k].botId==bi){myp=t2[k].pressure;myc=t2[k].count;}
 			}
-			
-			if(myc>0){console.log("Enemy has Units:"+JSON.stringify(t1[j]));}
-			
-			en.push([t1[j].y, t1[j].x, t1[j].nodeOnLand, myp, myc, ep, ec, bt[t1[j].y][t1[j].x][1]]);
+			en.push([t1[j].y, t1[j].x, t1[j].nodeOnLand, myp, myc, ep, ec, bt[t1[j].y][t1[j].x][1], 0]);
 			} 
 		}
 	
+	
+	
+	//Update own terr
+	for(j = b[mid].actions.length-1; j>=0; j--){
+		tn=b[mid].actions[j];
+		if(tn.actionType==11){
+			for(i = en.length-1; i>=0; i--){
+				if(tn.targetNodeId==en[i][2]){
+					en[i][8]=en[i][8]+tn.numberOfUnits;
+				}
+			}
+			for(i = t.length-1; i>=0; i--){
+				if(tn.targetNodeId==t[i][2]){
+					t[i][8]=t[i][8]+tn.numberOfUnits;
+				}
+			}
+			
+		}	
+	}
 	
 	//console.log("Enemy Borders:"+JSON.stringify(en));
 	
@@ -445,6 +465,7 @@ connection.on("ReceiveBotState", gameState => {
 					if(t1=='MW'&&!mz){tmWoodO.push(t[j]);}
 					if(t1!='MW'&&!mz){tmOtherO.push(t[j]);}
 					
+					break;
 				}					   
 			}
 		}
@@ -919,58 +940,29 @@ connection.on("ReceiveBotState", gameState => {
 		//tempPressure = (Count + 1) * RadialWeight * (ownsLand ? HomeGroundWeight : 1);
         //Pressure = (int) Math.Floor(tempPressure);
 	
-		teWoodQ.sort(function(a,b){return a[7]-b[7]});
 		
-		//Aim This for round+ds%10==9 (So that I can arive before enemy can defend)
-		
-		//Offset all en nodes as well as 
-			//Push all 11 own actions into a array
-			//Push all 11 enemy actions into a array
-				//Offset Nodes by actions
-			
-			//Hit last cycle ()
-				//
-				
-				
 		
 	
+		//Handle Wood in Own territory (Take)
 		if(ma>0){
-			for(i=0;i<teWoodQ.length;i++){
-				
-				radical = Math.floor(1 + 10/(teWoodQ[i][7] + 0.01));
-				console.log("Radical Weight: "+radical);
-				
-				nu=Math.ceil(((teWoodQ[i][5]+1)/radical)-1);
-				if(teWoodQ[i][4]>=nu){nu=nu-teWoodQ[i][4];}
-				if(nu==0){nu=1;}
-				
-				console.log("NU: "+nu);
-				
-				if(nu<ma){m.actions.push({"type" : 11,"units" : nu,"id" : teWoodQ[i][2]});ma=ma-nu;   
-								console.log("Details "+" x-"+teWoodQ[i][1]+" y-"+teWoodQ[i][0]);
-								console.log("Try "+JSON.stringify({"type" : 11,"units" : nu,"id" : teWoodQ[i][2]}));
-							   }
-				}
+			teWoodQ.sort(function(a,b){return a[7]-b[7]});
+			conquest(teWoodQ);
 		}
-		//Cleanup Own TMWOOD Nodes
-			for(i=0;i<tmWoodQ.length;i++){
-				if(tmWoodQ[i][4]>0){
-					
-					m.actions.push({"type" : 12,"units" : tmWoodQ[i][4],"id" : tmWoodQ[i][2]});
-					console.log("Found "+JSON.stringify({"type" : 12,"units" : tmWoodQ[i][4],"id" : tmWoodQ[i][2]}));
-				}
+		
+		//Handle Wood in Own territory (Retrieve)
+		retreat(tmWoodQ);
+			
+		//Handle Other Nodes in Own territory (Take)
+		if(ma>0){
+			teOtherQ.sort(function(a,b){return a[7]-b[7]});	
+			conquest(teOtherQ);	
 			}
-			//For Own
 		
-		//RadialWeight = (int) Math.Floor(1 + 10/(distanceFromBotBase + 0.01)); // todo: add these to the config	
-	
-	
-		//Homeground weight: 1,1
-		//Own Radical = 
-	
-	
+		//Handle Other Nodes in Own territory (Retrieve)
+		retreat(tmOtherQ);
 		
-		//Recall all units in own wood (if % 10 == 0)
+		//Defend Wood in own territory
+			
 	
 	
 		//Step 9: If still have units left here, Stockpile Heat for the future
@@ -1232,3 +1224,32 @@ function calcScore(ti){
 	
 	return tp;
 }	
+
+function conquest(target){
+			for(i=0;i<target.length;i++){
+				console.log((r+target[i][7])%10);
+				if((r+target[i][7])%10==9){
+				radical = Math.floor(1 + 10/(target[i][7] + 0.01));
+				console.log("Radical Weight: "+radical);
+				
+				nu=Math.ceil(((target[i][5]+1)/radical)-1);
+				if(nu==0){nu=1;}
+				if(target[i][4]+target[i][8]>=nu){nu=nu-(target[i][4]+target[i][8]);}
+				
+				console.log("NU: "+nu);
+				
+				if(nu<ma&&nu>0){m.actions.push({"type" : 11,"units" : nu,"id" : target[i][2]});ma=ma-nu;   
+								console.log("Details "+" x-"+target[i][1]+" y-"+target[i][0]);
+								console.log("Try "+JSON.stringify({"type" : 11,"units" : nu,"id" : target[i][2]}));
+							   }
+				}}
+		}
+
+function retreat(target){
+	for(i=0;i<target.length;i++){
+				if(target[i][4]>0&&target[i][6]==0){
+					m.actions.push({"type" : 12,"units" : target[i][4],"id" : target[i][2]});
+					console.log("Found "+JSON.stringify({"type" : 12,"units" : target[i][4],"id" : target[i][2]}));
+				}
+			}
+}

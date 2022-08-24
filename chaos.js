@@ -955,11 +955,11 @@ connection.on("ReceiveBotState", gameState => {
 		//Handle Other Nodes in Own territory (Take)
 		if(ma>0){
 			teOtherQ.sort(function(a,b){return a[7]-b[7]});	
-			conquest(teOtherQ);	
+			//conquest(teOtherQ);	
 			}
 		
 		//Handle Other Nodes in Own territory (Retrieve)
-		retreat(tmOtherQ);
+		//retreat(tmOtherQ);
 		
 		//Defend Wood in own territory
 			

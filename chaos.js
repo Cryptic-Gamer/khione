@@ -421,7 +421,7 @@ connection.on("ReceiveBotState", gameState => {
 	teOtherO=[]; //Enemy Territory Non Wood Outer Quadrent
 		
 	//Populate Enemy Territory Zone Arrays
-	for(i = en.length-1; i>=0; i--){tx=en[i][1];ty=en[i][0];t1=bt[ty][tx][0];	
+	for(i = en.length-1; i>=0; i--){tx=en[i][1];ty=en[i][0];t1=bt[ty][tx][0];if(t1=='EB'){continue;}	
 		for(j = t.length-1; j>=0; j--){			   
 				if(Math.abs(ty-t[j][0])<=1&&Math.abs(tx-t[j][1])<=1){
 					
@@ -955,11 +955,11 @@ connection.on("ReceiveBotState", gameState => {
 		//Handle Other Nodes in Own territory (Take)
 		if(ma>0){
 			teOtherQ.sort(function(a,b){return a[7]-b[7]});	
-			//conquest(teOtherQ);	
+			conquest(teOtherQ);	
 			}
 		
 		//Handle Other Nodes in Own territory (Retrieve)
-		//retreat(tmOtherQ);
+		retreat(tmOtherQ);
 		
 		//Defend Wood in own territory
 			

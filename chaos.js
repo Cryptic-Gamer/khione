@@ -352,7 +352,7 @@ connection.on("ReceiveBotState", gameState => {
 	
 	//Update NB
 	for(j = nb.length-1; j>=0; j--){
-		t1=true;ty=nb[j][1];tx=nb[j][0];
+		t1=true;ty=nb[j][0];tx=nb[j][1];
 		for(i = 0; i<b[mid].actions.length; i++){
 			tn=b[mid].actions[i];
 			if(tn.actionType>5&&tn.targetNodeId==nb[j][3]){t1=false;}

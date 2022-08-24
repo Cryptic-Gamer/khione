@@ -942,10 +942,17 @@ connection.on("ReceiveBotState", gameState => {
 		//Handle Wood in Own territory (Take)
 		
 		teWoodQ.sort(function(a,b){return a[7]-b[7]});
+		teOtherQ.sort(function(a,b){return a[7]-b[7]});	
 		tmWoodQ.sort(function(a,b){return a[7]-b[7]});
-		teOtherQ.sort(function(a,b){return a[7]-b[7]});	
-		teOtherQ.sort(function(a,b){return a[7]-b[7]});	
+		tmOtherQ.sort(function(a,b){return a[7]-b[7]});	
 		
+		
+		//Handle Outer Wood
+		tmWoodO.sort(function(a,b){return a[7]-b[7]});
+		tmOtherO.sort(function(a,b){return a[7]-b[7]});	
+		teWoodO.sort(function(a,b){return a[7]-b[7]});
+		teOtherO.sort(function(a,b){return a[7]-b[7]});	
+	
 		conquest(teWoodQ);	
 		conquest(teOtherQ);	
 		
@@ -995,17 +1002,26 @@ connection.on("ReceiveBotState", gameState => {
 		}
 		
 	
-		//Handle Outer Wood
-		tmWoodO.sort(function(a,b){return a[7]-b[7]});
-		tmOtherO.sort(function(a,b){return a[7]-b[7]});	
-		teWoodO.sort(function(a,b){return a[7]-b[7]});
-		teOtherO.sort(function(a,b){return a[7]-b[7]});	
+		
 		
 		conquest(teWoodO);	
 		conquest(teOtherO);	
 		
 		
-		if(ma>0&&mwood<1000000){
+		if(ma>0&&ma>2000){
+			
+			teWoodQ.sort(function(a,b){return b[7]-a[7]});
+			teOtherQ.sort(function(a,b){return b[7]-a[7]});	
+			tmWoodQ.sort(function(a,b){return b[7]-a[7]});
+			tmOtherQ.sort(function(a,b){return b[7]-a[7]});	
+
+
+			//Handle Outer Wood
+			tmWoodO.sort(function(a,b){return b[7]-a[7]});
+			tmOtherO.sort(function(a,b){return b[7]-a[7]});	
+			teWoodO.sort(function(a,b){return b[7]-a[7]});
+			teOtherO.sort(function(a,b){return b[7]-a[7]});	
+			
 			judgement(Math.ceil(ma/2));
 			salvation(Math.floor(ma))
 		  } 

@@ -1003,7 +1003,7 @@ connection.on("ReceiveBotState", gameState => {
 		
 	
 		
-		
+		conquest(teOtherQ);	
 		conquest(teWoodO);	
 		conquest(teOtherO);	
 		

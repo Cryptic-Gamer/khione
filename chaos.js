@@ -1267,9 +1267,10 @@ function conquest(target){
 
 function retreat(target){
 	for(i=0;i<target.length;i++){
-				if(target[i][4]>0&&target[i][6]==0){
-					m.actions.push({"type" : 12,"units" : target[i][4],"id" : target[i][2]});
+				if((target[i][4]>5&&target[i][6]==0&&ma>0)||target[i][4]>100){
+					m.actions.push({"type" : 12,"units" : 1,"id" : target[i][2]});
 					console.log("Found "+JSON.stringify({"type" : 12,"units" : target[i][4],"id" : target[i][2]}));
+					ma--;
 				}
 			}
 }

@@ -1246,10 +1246,8 @@ function calcScore(ti){
 
 function conquest(target){
 			for(i=0;i<target.length;i++){
-				console.log((r+target[i][7])%10);
 				if((r+target[i][7])%10==9){
 				radical = Math.floor(1 + 10/(target[i][7] + 0.01));
-				//console.log("Radical Weight: "+radical);
 				
 				nu=Math.ceil(((target[i][5]+1)/radical)-1);
 				if(nu==0){nu=1;}
@@ -1257,7 +1255,6 @@ function conquest(target){
 					
 				if(target[i][4]+target[i][8]>=nu){nu=nu-(target[i][4]+target[i][8]);}
 				
-				//console.log("NU: "+nu);
 				
 				if(nu<ma&&nu>0){m.actions.push({"type" : 11,"units" : nu,"id" : target[i][2]});ma=ma-nu;   
 								console.log("Try "+JSON.stringify({"type" : 11,"units" : nu,"id" : target[i][2]}));

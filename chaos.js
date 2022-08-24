@@ -1005,7 +1005,7 @@ connection.on("ReceiveBotState", gameState => {
 		conquest(teOtherO);	
 		
 		
-		if(ma>0){
+		if(ma>0&&mwood<1000000){
 			judgement(Math.ceil(ma/2));
 			salvation(Math.floor(ma))
 		  } 

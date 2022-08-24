@@ -1232,7 +1232,7 @@ function retreat(){
 //The idea with judgement is to take all my endgame extra units and distribute them evenly accross all my remaining nodes
 function judgement(units){
 	t1=teWoodO.length+teWoodQ.length+teOtherQ.length+teOtherO.length;
-	t2=Math.floor(units/2);
+	t2=Math.floor(units/20);
 	if(t2>0){
 		console.log("Let there be Judgement:"+t2);
 		for(i=teWoodQ.length-1;i>=0;i--){if(units>0){m.actions.push({"type" : 11,"units" : t2,"id" : teWoodQ[i][2]});ma=ma-t2;units=units-t2;}}

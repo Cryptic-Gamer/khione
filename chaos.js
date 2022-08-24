@@ -17,7 +17,7 @@ var myp, myc, ep, ec;
 var sct=false;
 
 var en;
-var heatreq=14500000;//Make sure this works
+var heatreq;//Make sure this works
 
 const connection = new signalR.HubConnectionBuilder().withUrl(url).configureLogging(signalR.LogLevel.Information).build();
 
@@ -65,7 +65,6 @@ var offwx, offgx, offsx;
 
 var cycle=0;
 var minr,maxr;
-var cbuild = true;
 
 //just temp
 
@@ -98,6 +97,7 @@ var fst, mst, wst; //Res Status, temp status
 var wr,gr,sr;
 var adv, advr;
 var bphase=1;
+var bgain, bloss;
 
 var quad="";
 
@@ -109,8 +109,8 @@ build.push(['O', 1, 220, 110, 0, 3, 49, 10]);
 build.push(['L', 1, 40, 15, 0, 1, 9, 5]);
 
 
-var t1, t2, t3, t4, t5, tcomp; //temporary variables for performance boosts
-var mwood, mstone, mgold;
+var t1, t2, t3, t4, t5, t6, tcomp; //temporary variables for performance boosts
+var mwood, mstone, mgold, woodsup;
 var twr,tsr,tgr;	
 
 //Lastly Territory
@@ -123,9 +123,11 @@ var twr,tsr,tgr;
 	var teOtherQ=[]; //Enemy Territory Non Wood Own Q
 	var tmOtherO=[]; //Own Territory Non Wood Outer Quadrent
 	var teOtherO=[]; //Enemy Territory Non Wood Outer Quadrent
+
+	var tmOuterBounds=[]; //Any enemy nodes outside of my own range (For cleanup)
+	var teOuterBounds=[]; //All Enemy nodes out of Range (For Cleanup)
+
 	var mz; //zone
-
-
 
 connection.on("ReceiveBotState", gameState => {
 
@@ -139,7 +141,7 @@ connection.on("ReceiveBotState", gameState => {
 	
 	cycle=Math.floor(r/10);
 	if(r%10==0){cycle--;}
-	
+
 	if(r==1){
 		
 		p=gameState.populationTiers;
@@ -196,6 +198,17 @@ connection.on("ReceiveBotState", gameState => {
 	if(adv>0){advr=((cycle+adv)*10);}
 	else {advr=5000;}
 	
+	heatreq=(mh*-1);
+	
+	for(i=cycle;i<=252;i++){
+		heatreq=heatreq+mp;
+		if(mp<30516){mp=Math.ceil(mp*1.05);}
+		else {mp=Math.ceil(mp*1.03);}
+	}
+	
+	mp=b[mid].population;
+	
+	console.log("Current Heat Req:"+heatreq);
 	
 	abuild=0;
 	
@@ -248,109 +261,40 @@ connection.on("ReceiveBotState", gameState => {
 	
 	
 	
-	for(j = nb.length-1; j>=0; j--){
-		t1=true;
-		for(i = 0; i<b[mid].actions.length; i++){
-			tn=b[mid].actions[i];
-			if(tn.actionType>5&&tn.targetNodeId==nb[j][3]){t1=false;}
-		}
-		if(t1){nb.splice(j, 1);}
-		else{nb[j][7]=nb[j][7]-1;}
-		}
+	t=[]; //x, y, id, my pressure, my units, enemy pressure (best), enemy units (best), distance, myinb, mycomp, enemyinb, encomp
+	en=[]; //x, y, id, my pressure, my units, enemy pressure (best), enemy units (best), distance, myinb, mycomp, enemyinb, encomp
 	
-	t=[]; //x, y, id, my pressure, my units, enemy pressure (best), enemy units (best)
-	en=[]; //x, y, id, my pressure, my units, enemy pressure (best), enemy units (best)
-	
-	t1=b[mid].territory;
-	
-	for(j = t1.length-1; j>=0; j--){
-			
-			ep=0;ec=0;myp=0;myc=0;
-			t2=t1[j].occupants;
-			for(k = t2.length-1; k>=0; k--){
-				if(t2[k].botId==bi){myp=t2[k].pressure;myc=t2[k].count;}
-				else{
-					if(ep<t2[k].pressure){ep=t2[k].pressure;ec=t2[k].count;}
-					}
-			}
-			
-			t.push([t1[j].y, t1[j].x, t1[j].nodeOnLand, myp, myc, ep, ec, bt[t1[j].y][t1[j].x][1], 0]);
-			} 
 	
 	//console.log("My Borders:"+JSON.stringify(t));
 	
-	
-	
-	for(i = b.length-1; i>=0; i--){if(b[i].id==bi){continue;}
+	for(i = b.length-1; i>=0; i--){
 		t1=b[i].territory;						   
 		for(j = t1.length-1; j>=0; j--){
 			
-			ep=0;ec=0;myp=0;myc=0;
-			t2=t1[j].occupants;
-			for(k = t2.length-1; k>=0; k--){
-				if(t2[k].botId==b[i].id){ep=t2[k].pressure;ec=t2[k].count;}
-				if(t2[k].botId==bi){myp=t2[k].pressure;myc=t2[k].count;}
+				ep=0;ec=0;myp=0;myc=0;
+				t2=t1[j].occupants;
+				for(k = t2.length-1; k>=0; k--){
+					if(t2[k].botId==bi){myp=t2[k].pressure;myc=t2[k].count;}
+					else {ep=t2[k].pressure;ec=t2[k].count;}
+				}
+
+				t3=0;
+				tn=b[mid].actions;
+				for(k = tn.length-1; k>=0; k--){
+					if(tn[k].actionType==11&&tn[k].targetNodeId==t1[j].nodeOnLand){
+						t3=t3+tn.numberOfUnits;
+					}
+				}
+
+				if(b[i].id==bi){
+					t.push([t1[j].y, t1[j].x, t1[j].nodeOnLand, myp, myc, ep, ec, bt[t1[j].y][t1[j].x][1], t3]);
+				} else {					   
+					en.push([t1[j].y, t1[j].x, t1[j].nodeOnLand, myp, myc, ep, ec, bt[t1[j].y][t1[j].x][1], t3]);
+				} 
 			}
-			en.push([t1[j].y, t1[j].x, t1[j].nodeOnLand, myp, myc, ep, ec, bt[t1[j].y][t1[j].x][1], 0]);
-			} 
 		}
 	
-	
-	
-	//Update own terr
-	for(j = b[mid].actions.length-1; j>=0; j--){
-		tn=b[mid].actions[j];
-		if(tn.actionType==11){
-			for(i = en.length-1; i>=0; i--){
-				if(tn.targetNodeId==en[i][2]){
-					en[i][8]=en[i][8]+tn.numberOfUnits;
-				}
-			}
-			for(i = t.length-1; i>=0; i--){
-				if(tn.targetNodeId==t[i][2]){
-					t[i][8]=t[i][8]+tn.numberOfUnits;
-				}
-			}
-			
-		}	
-	}
-	
 	//console.log("Enemy Borders:"+JSON.stringify(en));
-	
-	cbuild=true;
-	
-		//For Territory
-			//Phase 1 try and grab any Wood lots with resources.
-				//Try and do this before I burn extra Heat even???
-				//Try and expand and take resource nodes???
-				//Resource Nodes should be easy to keep
-		
-		//Right before heat
-	
-		//Territory Strategy
-			//Phase 1: Try and defend own quadrent (Retain - Res only)
-			//Phase 2: Try and take own quadrent (Aim to land on a %9 tick)
-			
-		//At the very end if still have units
-	
-		//Territory Strategy
-			//Phase 3: Try and take woodnode all (If has res)
-			//Phase 4: Try and take closestnodes all
-			//Phase 5: Reinforce Closest Wood (If has res)
-			//Phase 6: Reinforce nodes that still have wood (Protect)
-			
-		//Withdrawal strat
-			//Calc if node is important (A res node)
-			//Else if own node, withdraw
-		
-		//What is the winning FActor? 
-			//Still heat...
-			//It was always about heat and the starve function...
-			//In the finals undoubtedly the 4v4 will destroy resources on the map, and start fighting over territory. 
-			//Defence will be cheaper than offence.
-			//Neither Should I ignore Wood Nodes in the distance
-	
-	
 	for(k=s.length-1;k>=0;k--){
 		for(j=b[mid].map.scoutTowers.length-1;j>=0;j--){
 			if(s[k][0]==b[mid].map.scoutTowers[j]){s.splice(k, 1);console.log("Removed Tower");break;}
@@ -406,6 +350,19 @@ connection.on("ReceiveBotState", gameState => {
 					if(bt[ty][tx][0]=='G'){bt[ty][tx][0]='EG';}
 		} 
 	
+	//Update NB
+	for(j = nb.length-1; j>=0; j--){
+		t1=true;ty=nb[j][1];tx=nb[j][0];
+		for(i = 0; i<b[mid].actions.length; i++){
+			tn=b[mid].actions[i];
+			if(tn.actionType>5&&tn.targetNodeId==nb[j][3]){t1=false;}
+		}
+		if(t1){nb.splice(j, 1);}
+		else if(bt[ty][tx][0]=='X'){nb.splice(j, 1);console.log("Lost Building territory");mbuild--;}
+		else{nb[j][7]=nb[j][7]-1;}
+		}
+	
+	
 	//Update Enemy Buildings
 	for(i = b.length-1; i>=0; i--){if(b[i].id==bi){continue;}
 		for(j=b[i].buildings.length-1;j>=0;j--){
@@ -419,10 +376,20 @@ connection.on("ReceiveBotState", gameState => {
 	teWoodO=[]; //Enemy Wood Outer Quadrent
 	teOtherQ=[]; //Enemy Territory Non Wood Own Q
 	teOtherO=[]; //Enemy Territory Non Wood Outer Quadrent
-		
+	
+	tmOuterBounds=[]; //All Own nodes out of Range of enemy (For Cleanup)
+	teOuterBounds=[]; //All Enemy nodes out of Range (For Cleanup)
+	
 	//Populate Enemy Territory Zone Arrays
-	for(i = en.length-1; i>=0; i--){tx=en[i][1];ty=en[i][0];t1=bt[ty][tx][0];if(t1=='EB'){continue;}	
-		for(j = t.length-1; j>=0; j--){			   
+	for(i = en.length-1; i>=0; i--){tx=en[i][1];ty=en[i][0];t1=bt[ty][tx][0];
+		if(t1=='EB'){
+			if(en[i][4]>0&&ma>0){
+				m.actions.push({"type" : 12,"units" : 1,"id" : en[i][2]});
+				console.log("Found ENEMY BUILDING "+JSON.stringify({"type" : 12,"units" : 1,"id" : en[i][2]}));
+				ma--;
+			}
+		continue;}	
+		for(j = t.length-1; j>=0; j--){	t2=true;   
 				if(Math.abs(ty-t[j][0])<=1&&Math.abs(tx-t[j][1])<=1){
 					
 					mz=false;
@@ -436,9 +403,10 @@ connection.on("ReceiveBotState", gameState => {
 					if(t1=='EW'&&!mz){teWoodO.push(en[i]);}
 					if(t1!='EW'&&!mz){teOtherO.push(en[i]);}
 					 
-					break;
-				}					   
+					t2=false;break;
+				} 
 			}
+			if(t2){teOuterBounds.push(en[i]);}						
 		}
 	
 	
@@ -450,9 +418,8 @@ connection.on("ReceiveBotState", gameState => {
 	
 	//Populate Own Territory Zone Arrays
 	for(j = t.length-1; j>=0; j--){tx=t[j][1];ty=t[j][0];t1=bt[ty][tx][0];
-		for(i = en.length-1; i>=0; i--){
+		for(i = en.length-1; i>=0; i--){t2=true;
 				if(Math.abs(en[i][1]-tx)<=1&&Math.abs(en[i][0]-ty)<=1){
-					
 					mz=false;
 					if(quad=="SE"&&tx>=20&&ty>=20){mz=true;}
 					if(quad=="NW"&&tx<=19&&ty<=19){mz=true;}
@@ -464,13 +431,15 @@ connection.on("ReceiveBotState", gameState => {
 					if(t1=='MW'&&!mz){tmWoodO.push(t[j]);}
 					if(t1!='MW'&&!mz){tmOtherO.push(t[j]);}
 					
-					break;
-				}					   
+					t2=false;break;
+				}	
 			}
+			if(t2){tmOuterBounds.push(t[j]);}			   
 		}
 	
 	//Populate Own Territory Zone Arrays
-	
+	//console.log("teOuterBounds:"+JSON.stringify(teOuterBounds));
+	//console.log("tmOuterBounds:"+JSON.stringify(tmOuterBounds));
 	
 	//Update Own territory
 	for(j = t.length-1; j>=0; j--){
@@ -482,6 +451,7 @@ connection.on("ReceiveBotState", gameState => {
 	mwood=0;
 	mstone=0;
 	mgold=0;
+	woodsup=0;
 	
 	//Adjust Nodes for rewards (Own and Enemy)
 	for(i = w.map.nodes.length-1; i>=0; i--){
@@ -492,7 +462,7 @@ connection.on("ReceiveBotState", gameState => {
 						t4=Math.floor(tn.reward*0.7);	
 		
 						if(tn.type==1){
-			
+							
 							for(j=wn.length-1;j>=0;j--){t1=wn[j];if(t1[0]==tn.id){
 								t3=tn.reward+wst;
 								
@@ -507,7 +477,7 @@ connection.on("ReceiveBotState", gameState => {
 									wn[j][4]=Math.round(t4/bt[t1[7]][t1[6]][1] * 100) / 100;
 									wn[j][3]=tn.amount-(t5*t4)-(t2*tn.reward);	
 									}
-							}}
+							}woodsup=woodsup+wn[j][3];}
 						} else if(tn.type==2){
 							for(j=fn.length-1;j>=0;j--){t1=fn[j];if(t1[0]==tn.id){
 								t3=tn.reward+fst;
@@ -619,8 +589,6 @@ connection.on("ReceiveBotState", gameState => {
 	
 	console.log("My Territorial Res left: W="+mwood+" S="+mstone+" G="+mgold);
 
-	//Set cBuild according to Territorial res
-	
 	//console.log("Future Farm Vars:"+JSON.stringify(fr));
 	
 	//Try running Woodsup only on nodes in own territory but set to 200 000
@@ -630,7 +598,7 @@ connection.on("ReceiveBotState", gameState => {
 	//Set 
 	
 	starve=false;
-	if(bphase==3&&mwood<200000){
+	if(bphase==3&&mwood<200000&&woodsup<1000000){
 		i=cycle;
 		j=mp;
 		t1=mf;
@@ -649,28 +617,7 @@ connection.on("ReceiveBotState", gameState => {
 		if(starve){console.log("Starve Status:"+starve+" should end:"+i+" offset:"+t2);}
 	}
 	
-	//Set Goldsup anmd Stonesup
-		//Use that to deturmine if I can build or not
-	
-	//Build Phase 3
-		//Calculate unit saving / speed boost on Lumber
-		//check if I can afford it according to what I own in my territory
-		//If unit diff >farmtime -> continue
-	
-	//Has to combine with agrression
-		//If I have unit advantage i can try and take more territory
-		
-	
-	
-	//Calculate when it will be worth building lumber or food...
-		//From a unit loss / gain perspective...
-		//Burn Map resources on build advantage
-		//Use those buildings to build a wall around my territory as much as possible. 
-	
-	//Calculate wood in own territory
-		//Calculate impact of building a lumbermill 
-		//So take how many units will be required to farm the res
-		//Then calculate how many units will  
+	//??
 	
 	//Consider Emptying "Hot Bases" first
 		//This would look like: "If Base was taken over"
@@ -680,6 +627,12 @@ connection.on("ReceiveBotState", gameState => {
 	
 	
 	minr=0;maxr=2499;
+	
+	if(ma>0){
+		  	if(r%30==0){ender();}
+			else {retreat();}	
+		}
+	
 	
 	//Step 1: Try and get what I need to maintain population (Complete)
 	if(ma>0){
@@ -731,7 +684,7 @@ connection.on("ReceiveBotState", gameState => {
 		
 	
 	
-		if(ma>0&&cbuild){
+		if(ma>0){
 			
 			wr=mw;
 			gr=mg;
@@ -744,13 +697,23 @@ connection.on("ReceiveBotState", gameState => {
 				gr=gr-t1.gold-1;
 				sr=sr-t1.stone-1;
 			   }
-		
+			
+			if(bphase==3){
+				
+				//console.log("Setting Constraints to MAX here before building Lumber");
+				
+				t1=p[6].tierResourceConstraints;
+				
+			    wr=wr-t1.wood-1;
+				gr=gr-t1.gold-1;
+				sr=sr-t1.stone-1;
+			   }
+			
+			
 			//Readjust offsets from already built buildings
 			for(i = nb.length-1; i>=0; i--){wr=wr-nb[i][4];sr=sr-nb[i][5];gr=gr-nb[i][6]; }
 			
-			
-			
-			if(bphase==3){console.log("Can Build Wood:"+wr+" Stone:"+sr+" Gold:"+gr);}
+			//console.log("Can Build Wood:"+wr+" Stone:"+sr+" Gold:"+gr);
 			
 			//calculate building territory weights
 			for(j = build.length-1; j>=0; j--){
@@ -766,7 +729,43 @@ connection.on("ReceiveBotState", gameState => {
 			else if(bphase==3){canbuild=['L'];}//Just lumber, No sort
 			else {}
 			
-			//console.log("Build:"+JSON.stringify(build));
+			
+			//Building Phase 3
+			if(bphase==3){
+				
+				t1=build[4][0];	
+				t2=build[4][1];	
+				t3=build[4][2];	
+				t4=build[4][3];	
+				t5=build[4][5];
+				
+				bgain=Math.floor((mwood/wst+3)-(mwood/(wst)));
+				bloss=Math.ceil((t3*t2/wst)+(t3*t2/mst)+(t4*t2/mst));
+				
+				//console.log("Gain "+bgain+" vs "+bloss+" Loss");
+				
+				if(bgain - bloss > 10000){
+				tmOuterBounds.sort(function(a,b){return b[7]-a[7]});
+				
+				for(i=0;i<tmOuterBounds.length;i++){
+					tx=tmOuterBounds[i][1];
+					ty=tmOuterBounds[i][0];
+					if(bt[ty][tx][0]=='E'){
+						if(wr>t3*t2&&wr>=t3*t2&&wr>=t4*t2){mbuild++;
+								
+								bt[ty][tx][0]='T';
+								nb.push([tx,ty,build[4][5],tmOuterBounds[i][2],t3*t2,t3*t2,t4*t2,bt[ty][tx][1]+build[4][7]+1,t3*t2,t4*t2]);
+								ma--;
+
+						m.actions.push({"type" : 8,"units" : 1,"id" : tmOuterBounds[i][2]});
+						console.log("Build Lumber ADV:"+JSON.stringify({"type" : 8,"units" : 1,"id" : tmOuterBounds[i][2]})+" X:"+tx+" Y:"+ty);}						  
+
+					}
+				}
+			}
+				
+			}
+			
 			
 			if(bphase==1||bphase==2){
 			//console.log("Building Phase Active :"+bphase);
@@ -859,10 +858,7 @@ connection.on("ReceiveBotState", gameState => {
 			}}
 			}
 			
-			//Building Phase 3
-			if(bphase==3&&cbuild){
-				//console.log("Building Phase 3 Active");
-			}
+			
 			
 		}
 		
@@ -944,46 +940,17 @@ connection.on("ReceiveBotState", gameState => {
 			//End Heat Strat hit closest possible wood with 1K troops at a time
 	
 		//Handle Wood in Own territory (Take)
-		if(ma>0){
-			teWoodQ.sort(function(a,b){return a[7]-b[7]});
-			conquest(teWoodQ);
-		}
 		
-		//Handle Wood in Own territory (Retrieve)
-		retreat(tmWoodQ);
+		teWoodQ.sort(function(a,b){return a[7]-b[7]});
+		tmWoodQ.sort(function(a,b){return a[7]-b[7]});
+		teOtherQ.sort(function(a,b){return a[7]-b[7]});	
+		teOtherQ.sort(function(a,b){return a[7]-b[7]});	
+		
+		conquest(teWoodQ);	
+		conquest(teOtherQ);	
+		
+		
 			
-		//Handle Other Nodes in Own territory (Take)
-		if(ma>0){
-			teOtherQ.sort(function(a,b){return a[7]-b[7]});	
-			conquest(teOtherQ);	
-			}
-		
-		//Handle Other Nodes in Own territory (Retrieve)
-		retreat(tmOtherQ);
-		
-		//Handle Outer Wood
-		if(ma>0){
-			teWoodO.sort(function(a,b){return a[7]-b[7]});	
-			conquest(teWoodO);	
-			}
-		
-		//Retreat Outer	
-		retreat(teWoodO);
-		
-		//Handle Outer Wood
-		if(ma>0){
-			teOtherO.sort(function(a,b){return a[7]-b[7]});	
-			conquest(teOtherO);	
-			}
-		
-		//Retreat Outer	
-		retreat(teOtherO);
-	
-		
-		//Defend Wood in own territory
-			
-	
-	
 		//Step 9: If still have units left here, Stockpile Heat for the future
 		if(ma>0&&heatreq>0){
 			
@@ -1009,14 +976,6 @@ connection.on("ReceiveBotState", gameState => {
 			farm();
 		}
 		
-		//1 Round delay on Farm Actions???
-			//Maybe. If true, Lets patch
-	
-		//Territory Play here???
-	
-		//Step 11: If still have units left here, Allow any future farming
-			////Loosen Future Farm maybe???
-			//Allow return on 1 
 		if(ma>0&&adv>0){
 				//console.log("Attempting Next Future Farm if still have units: "+adv+" try "+ma+" units");
 				minr=((cycle+adv+1)*10)+2;
@@ -1035,21 +994,23 @@ connection.on("ReceiveBotState", gameState => {
 				cut();
 		}
 		
-		//Still have units left here??
-			//Farm Everything thats left, Wood, Gold, Stone
-			//Essentially I am the ruler of the lands and all I can do now is slow others down.
 	
+		//Handle Outer Wood
+		tmWoodO.sort(function(a,b){return a[7]-b[7]});
+		tmOtherO.sort(function(a,b){return a[7]-b[7]});	
+		teWoodO.sort(function(a,b){return a[7]-b[7]});
+		teOtherO.sort(function(a,b){return a[7]-b[7]});	
 		
-		//If still have Extra Units here... 
-			//Just hit all Wood to lower enemy farm capacity. 
-			//Add 500000 to my end farm and see how that ends for my Heat (Probably not best for 4v4, so check closely)
-			//Maybe add an extra 500 000 to my own heat requirements...
-			//Reason: If Im doing really well, adding more heat could be great. 
+		conquest(teWoodO);	
+		conquest(teOtherO);	
 		
-	//Set sabotage if still units left here instead.
-		//Will destroy them by making sure they cannot get the wood they need...
-		//Track enemy territory?
+		
+		if(ma>0){
+			judgement(Math.ceil(ma/2));
+			salvation(Math.floor(ma))
+		  } 
 	
+		console.log("Population: "+mp);	
 	//console.log("My Quadrent:"+quad);
 	
 	
@@ -1175,7 +1136,6 @@ function mineGD(){
 	}
 }
 
-
 function burn(){
 	wh=0;
 	if(nh>0&&mw>=3&&ma>0&&r<2490&&heatreq>0){
@@ -1195,26 +1155,6 @@ function scout() {
 	if(!sct){for(i = 0; i<s.length; i++){if(ma==0){break;}m.actions.push({"type" : 1,"units" : 1,"id" : s[i][0]});ma--;}}
 }
 
-//0,1 score for food or empty space
-		//if score < 1 dont allow building.
-		//Offset score, build towards center
-		//check my quodrent and if x falls towards center, add 2 bonus points (if tp>1 already)
-	//Build Phase 1
-
-		//Ignore diagonal zone behind base.
-		//That territory is out of reach of opponents, so I can grab them later, Better to fight for more central territory when the match starts
-
-	//Run Variation where the back is merely penelized. 
-		//Could created cases where it will still fix some problems in my builds
-	
-	//Impliment buildings as new marker...
-		//Rework calcscore??
-		//Test nb...
-
-
-	//If build phase == 3 (Make sure I have my stone and Gold, Starve all from Stone and Gold)
-		//Push Lumber
-		//Choke out of Advancement???
 var iq;
 function calcScore(ti){
 	tp=0;
@@ -1244,30 +1184,66 @@ function calcScore(ti){
 	return tp;
 }	
 
+	
+	
 function conquest(target){
 			for(i=0;i<target.length;i++){
 				if((r+target[i][7])%10==9){
 				radical = Math.floor(1 + 10/(target[i][7] + 0.01));
-				
 				nu=Math.ceil(((target[i][5]+1)/radical)-1);
-				if(nu==0){nu=1;}
-				if(nu>=100){nu=5;}
 					
 				if(target[i][4]+target[i][8]>=nu){nu=nu-(target[i][4]+target[i][8]);}
 				
-				
-				if(nu<ma&&nu>0){m.actions.push({"type" : 11,"units" : nu,"id" : target[i][2]});ma=ma-nu;   
-								console.log("Try "+JSON.stringify({"type" : 11,"units" : nu,"id" : target[i][2]}));
+				if(nu<=ma&&nu>0){m.actions.push({"type" : 11,"units" : nu,"id" : target[i][2]});ma=ma-nu;   
 							   }
 				}}
 		}
 
-function retreat(target){
-	for(i=0;i<target.length;i++){
-				if((target[i][4]>5&&target[i][6]==0&&ma>0)||target[i][4]>100){
-					m.actions.push({"type" : 12,"units" : 1,"id" : target[i][2]});
-					console.log("Found "+JSON.stringify({"type" : 12,"units" : target[i][4],"id" : target[i][2]}));
-					ma--;
-				}
-			}
+function retreat(){
+	for(i=t.length-1;i>=0;i--){if(t[i][4]>0&&t[i][6]==0&&ma>0){m.actions.push({"type" : 12,"units" : 1,"id" : t[i][2]});ma--;}}
+	for(i=en.length-1;i>=0;i--){if(en[i][4]>0&&en[i][6]==0&&ma>0){m.actions.push({"type" : 12,"units" : 1,"id" : en[i][2]});ma--;}}
 }
+
+//Last function ->
+	//its 20:30 on the last day of the challenge, I just realized I cant account for enemy actions. 
+	//This is good because in that case I doubt any user will be able to beat me on teritory...
+
+	//For my last 3 functions... I will write something truly unique...
+	//Judgement and salvation.
+	//One Destroys, the other Protects
+	//Then I will just add something that keeps all my units in my base. 
+
+//The idea with judgement is to take all my endgame extra units and distribute them evenly accross all my remaining nodes
+function judgement(units){
+	t1=teWoodO.length+teWoodQ.length+teOtherQ.length+teOtherO.length;
+	t2=Math.floor(units/2);
+	if(t2>0){
+		console.log("Let there be Judgement:"+t2);
+		for(i=teWoodQ.length-1;i>=0;i--){if(units>0){m.actions.push({"type" : 11,"units" : t2,"id" : teWoodQ[i][2]});ma=ma-t2;units=units-t2;}}
+		for(i=teWoodO.length-1;i>=0;i--){if(units>0){m.actions.push({"type" : 11,"units" : t2,"id" : teWoodO[i][2]});ma=ma-t2;units=units-t2;}}
+		for(i=teOtherQ.length-1;i>=0;i--){if(units>0){m.actions.push({"type" : 11,"units" : t2,"id" : teOtherQ[i][2]});ma=ma-t2;units=units-t2;}}
+		for(i=teOtherO.length-1;i>=0;i--){if(units>0){m.actions.push({"type" : 11,"units" : t2,"id" : teOtherO[i][2]});ma=ma-t2;units=units-t2;}}
+		}
+	}
+
+//The idea with Salvation is to choke out enemy invasions before they happen
+function salvation(units){
+	t1=tmWoodO.length+tmWoodQ.length+tmOtherQ.length+tmOtherO.length;
+	t2=Math.floor(units/20);
+	if(t2>0){
+		console.log("Let there be Salvation:"+t2);
+		for(i=tmWoodQ.length-1;i>=0;i--){if(units>0){m.actions.push({"type" : 11,"units" : t2,"id" : tmWoodQ[i][2]});ma=ma-t2;units=units-t2;}}
+		for(i=tmWoodO.length-1;i>=0;i--){if(units>0){m.actions.push({"type" : 11,"units" : t2,"id" : tmWoodO[i][2]});ma=ma-t2;units=units-t2;}}
+		for(i=tmOtherQ.length-1;i>=0;i--){if(units>0){m.actions.push({"type" : 11,"units" : t2,"id" : tmOtherQ[i][2]});ma=ma-t2;units=units-t2;}}
+		for(i=tmOtherO.length-1;i>=0;i--){if(units>0){m.actions.push({"type" : 11,"units" : t2,"id" : tmOtherO[i][2]});ma=ma-t2;units=units-t2;}}
+		}
+}
+
+function ender(){
+	console.log("Lets End It");
+	for(i=t.length-1;i>=0;i--){if(t[i][4]>0&&ma>0){m.actions.push({"type" : 12,"units" : 1,"id" : t[i][2]});ma--;}}
+	for(i=en.length-1;i>=0;i--){if(en[i][4]>0&&ma>0){m.actions.push({"type" : 12,"units" : 1,"id" : en[i][2]});ma--;}}
+	
+	
+}
+

@@ -441,7 +441,6 @@ connection.on("ReceiveBotState", gameState => {
 			}
 		}
 	
-	console.log("teWoodQ:"+JSON.stringify(teWoodQ));//Pass
 	
 	//Defend if time...
 	tmWoodQ=[]; //Own Wood in Own Quadrent
@@ -935,13 +934,14 @@ connection.on("ReceiveBotState", gameState => {
 		
 		minr=0;maxr=2499;
 	
-		
+		//Territory Plug...	
+	
 		//RadialWeight = Math.Floor(1 + 10/(distanceFromBotBase + 0.01));
 		//tempPressure = (Count + 1) * RadialWeight * (ownsLand ? HomeGroundWeight : 1);
         //Pressure = (int) Math.Floor(tempPressure);
-	
 		
-		
+		//To be safe, skip nodes with over 1K troops on
+			//End Heat Strat hit closest possible wood with 1K troops at a time
 	
 		//Handle Wood in Own territory (Take)
 		if(ma>0){
@@ -960,6 +960,25 @@ connection.on("ReceiveBotState", gameState => {
 		
 		//Handle Other Nodes in Own territory (Retrieve)
 		retreat(tmOtherQ);
+		
+		//Handle Outer Wood
+		if(ma>0){
+			teWoodO.sort(function(a,b){return a[7]-b[7]});	
+			conquest(teWoodO);	
+			}
+		
+		//Retreat Outer	
+		retreat(teWoodO);
+		
+		//Handle Outer Wood
+		if(ma>0){
+			teOtherO.sort(function(a,b){return a[7]-b[7]});	
+			conquest(teOtherO);	
+			}
+		
+		//Retreat Outer	
+		retreat(teOtherO);
+	
 		
 		//Defend Wood in own territory
 			
@@ -1230,16 +1249,17 @@ function conquest(target){
 				console.log((r+target[i][7])%10);
 				if((r+target[i][7])%10==9){
 				radical = Math.floor(1 + 10/(target[i][7] + 0.01));
-				console.log("Radical Weight: "+radical);
+				//console.log("Radical Weight: "+radical);
 				
 				nu=Math.ceil(((target[i][5]+1)/radical)-1);
 				if(nu==0){nu=1;}
+				if(nu>=100){nu=5;}
+					
 				if(target[i][4]+target[i][8]>=nu){nu=nu-(target[i][4]+target[i][8]);}
 				
-				console.log("NU: "+nu);
+				//console.log("NU: "+nu);
 				
 				if(nu<ma&&nu>0){m.actions.push({"type" : 11,"units" : nu,"id" : target[i][2]});ma=ma-nu;   
-								console.log("Details "+" x-"+target[i][1]+" y-"+target[i][0]);
 								console.log("Try "+JSON.stringify({"type" : 11,"units" : nu,"id" : target[i][2]}));
 							   }
 				}}

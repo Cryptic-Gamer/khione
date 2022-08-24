@@ -598,7 +598,7 @@ connection.on("ReceiveBotState", gameState => {
 	//Set 
 	
 	starve=false;
-	if(bphase==3&&mwood<200000&&woodsup<1000000){
+	if(bphase==3&&mwood<200000&&woodsup<1000000&&heatreq>0){
 		i=cycle;
 		j=mp;
 		t1=mf;

@@ -607,7 +607,7 @@ connection.on("ReceiveBotState", gameState => {
 		nh=mh+(Math.floor(t3/3*5));
 		for(i=cycle;i<250;i++){
 			nh=nh-j;
-			if(i>(248-t2)){starve=false;break;}
+			if(i>(250-t2)){starve=false;break;}
 			if(nh<=0){starve=true;break;}
 			if(t1>0){t1=t1-j;t2++;}
 			if(j<30516){j=Math.ceil(j*1.05);}

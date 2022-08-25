@@ -17,7 +17,7 @@ var myp, myc, ep, ec;
 var sct=false;
 
 var en;
-var heatreq;//Make sure this workss
+var heatreq;//Make sure this works
 
 const connection = new signalR.HubConnectionBuilder().withUrl(url).configureLogging(signalR.LogLevel.Information).build();
 
@@ -335,7 +335,7 @@ connection.on("ReceiveBotState", gameState => {
 				ty=t[j][0];
 				t1=bt[ty][tx][0];
 		
-				if(t1=='N'){bt[ty][tx][0]='E';}
+				if(t1=='N'||t1=='X'){bt[ty][tx][0]='E';}
 				else if(t1=='W'){bt[ty][tx][0]='MW';}
 				else if(t1=='F'||t1=='S'||t1=='G'){bt[ty][tx][0]='T';}
 				else{}
@@ -343,11 +343,17 @@ connection.on("ReceiveBotState", gameState => {
 	
 	//Update enemy territory on Map
 	for(i = en.length-1; i>=0; i--){tx=en[i][1];ty=en[i][0];
-					if(bt[ty][tx][0]=='N'){bt[ty][tx][0]='X';}
+					if(bt[ty][tx][0]=='N'||bt[ty][tx][0]=='E'){bt[ty][tx][0]='X';}
 					if(bt[ty][tx][0]=='F'){bt[ty][tx][0]='EF';}
 					if(bt[ty][tx][0]=='W'){bt[ty][tx][0]='EW';}
 					if(bt[ty][tx][0]=='S'){bt[ty][tx][0]='ES';}
 					if(bt[ty][tx][0]=='G'){bt[ty][tx][0]='EG';}
+									
+					for(j = nb.length-1; j>=0; j--){t1=nb[j][1];t2=nb[j][0];
+													if(ty==t1&&tx==t2){
+													   nb.splice(j, 1);console.log("Lost Building territory");mbuild--;break;
+													   }
+												   }
 		} 
 	
 	//Update NB
@@ -358,7 +364,6 @@ connection.on("ReceiveBotState", gameState => {
 			if(tn.actionType>5&&tn.targetNodeId==nb[j][3]){t1=false;}
 		}
 		if(t1){nb.splice(j, 1);}
-		else if(bt[ty][tx][0]=='X'){nb.splice(j, 1);console.log("Lost Building territory");mbuild--;}
 		else{nb[j][7]=nb[j][7]-1;}
 		}
 	
@@ -409,45 +414,6 @@ connection.on("ReceiveBotState", gameState => {
 			if(t2){teOuterBounds.push(en[i]);}						
 		}
 	
-	
-	//Defend if time...
-	tmWoodQ=[]; //Own Wood in Own Quadrent
-	tmWoodO=[]; //Own Wood Outer Quadrent
-	tmOtherQ=[]; //Own Territory Non Wood Own Q
-	tmOtherO=[]; //Own Territory Non Wood Outer Quadrent
-	
-	//Populate Own Territory Zone Arrays
-	for(j = t.length-1; j>=0; j--){tx=t[j][1];ty=t[j][0];t1=bt[ty][tx][0];
-		for(i = en.length-1; i>=0; i--){t2=true;
-				if(Math.abs(en[i][1]-tx)<=1&&Math.abs(en[i][0]-ty)<=1){
-					mz=false;
-					if(quad=="SE"&&tx>=20&&ty>=20){mz=true;}
-					if(quad=="NW"&&tx<=19&&ty<=19){mz=true;}
-					if(quad=="SW"&&tx<=19&&ty>=20){mz=true;}
-					if(quad=="NE"&&tx>=20&&ty<=19){mz=true;}
-					
-					if(t1=='MW'&&mz){tmWoodQ.push(t[j]);}
-					if(t1!='MW'&&mz){tmOtherQ.push(t[j]);}
-					if(t1=='MW'&&!mz){tmWoodO.push(t[j]);}
-					if(t1!='MW'&&!mz){tmOtherO.push(t[j]);}
-					
-					t2=false;break;
-				}	
-			}
-			if(t2){tmOuterBounds.push(t[j]);}			   
-		}
-	
-	//Populate Own Territory Zone Arrays
-	//console.log("teOuterBounds:"+JSON.stringify(teOuterBounds));
-	//console.log("tmOuterBounds:"+JSON.stringify(tmOuterBounds));
-	
-	//Update Own territory
-	for(j = t.length-1; j>=0; j--){
-				tx=t[j][1];ty=t[j][0];
-				t1=bt[ty][tx][0];if(t1!='MW'){continue;}
-				bt[ty][tx][0]='T';
-				}
-	
 	mwood=0;
 	mstone=0;
 	mgold=0;
@@ -466,11 +432,12 @@ connection.on("ReceiveBotState", gameState => {
 							for(j=wn.length-1;j>=0;j--){t1=wn[j];if(t1[0]==tn.id){
 								t3=tn.reward+wst;
 								
-								if(bt[t1[7]][t1[6]][0]=='T'){
+								if(bt[t1[7]][t1[6]][0]=='MW'){
 									wn[j][2]=t3;
 									wn[j][4]=Math.round(t3/bt[t1[7]][t1[6]][1] * 100) / 100;	
 									wn[j][3]=tn.amount-(t5*t3)-(t2*t4);	
 									mwood=mwood+wn[j][3];
+									if(wn[j][3]<=0){bt[t1[7]][t1[6]][0]='T';}
 									}
 								if(bt[t1[7]][t1[6]][0]=='EW'){
 									wn[j][2]=t4;
@@ -527,6 +494,46 @@ connection.on("ReceiveBotState", gameState => {
 							}}
 						}
 					}
+	
+	
+	//Defend if time...
+	tmWoodQ=[]; //Own Wood in Own Quadrent
+	tmWoodO=[]; //Own Wood Outer Quadrent
+	tmOtherQ=[]; //Own Territory Non Wood Own Q
+	tmOtherO=[]; //Own Territory Non Wood Outer Quadrent
+	
+	//Populate Own Territory Zone Arrays
+	for(j = t.length-1; j>=0; j--){tx=t[j][1];ty=t[j][0];t1=bt[ty][tx][0];
+		for(i = en.length-1; i>=0; i--){t2=true;
+				if(Math.abs(en[i][1]-tx)<=1&&Math.abs(en[i][0]-ty)<=1){
+					mz=false;
+					if(quad=="SE"&&tx>=20&&ty>=20){mz=true;}
+					if(quad=="NW"&&tx<=19&&ty<=19){mz=true;}
+					if(quad=="SW"&&tx<=19&&ty>=20){mz=true;}
+					if(quad=="NE"&&tx>=20&&ty<=19){mz=true;}
+					
+					if(t1=='MW'&&mz){tmWoodQ.push(t[j]);}
+					if(t1!='MW'&&mz){tmOtherQ.push(t[j]);}
+					if(t1=='MW'&&!mz){tmWoodO.push(t[j]);}
+					if(t1!='MW'&&!mz){tmOtherO.push(t[j]);}
+					
+					t2=false;break;
+				}	
+			}
+			if(t2){tmOuterBounds.push(t[j]);}			   
+		}
+	
+	//Populate Own Territory Zone Arrays
+	//console.log("teOuterBounds:"+JSON.stringify(teOuterBounds));
+	//console.log("tmOuterBounds:"+JSON.stringify(tmOuterBounds));
+	
+	//Update Own territory
+	for(j = t.length-1; j>=0; j--){
+				tx=t[j][1];ty=t[j][0];
+				t1=bt[ty][tx][0];if(t1!='MW'){continue;}
+				bt[ty][tx][0]='T';
+				}
+	
 	
 	for(k=fr.length-1;k>=0;k--){
 		for(j=wn.length-1;j>=0;j--){if(wn[j][0]==fr[k][0]){fr[k][3]=fr[k][2]*wn[j][2];}}
@@ -605,9 +612,9 @@ connection.on("ReceiveBotState", gameState => {
 		t3=mw+offw+offwx;
 		
 		nh=mh+(Math.floor(t3/3*5));
-		for(i=cycle;i<250;i++){
+		for(i=cycle;i<252;i++){
 			nh=nh-j;
-			if(i>(250-t2)){starve=false;break;}
+			if(i>(252-t2)){starve=false;break;}
 			if(nh<=0){starve=true;break;}
 			if(t1>0){t1=t1-j;t2++;}
 			if(j<30516){j=Math.ceil(j*1.05);}

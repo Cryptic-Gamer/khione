@@ -600,7 +600,7 @@ connection.on("ReceiveBotState", gameState => {
 	starve=false;
 	if(mwood<200000&&woodsup<500000&&heatreq>0){
 		t3=mw+offw+offwx;
-		if(mh+(Math.floor(t3/3*5))<heatreq){
+		if(heatreq-(mh+(Math.floor(t3/3*5)))>0){
 			starve=true;console.log("Starve Status:"+starve+" have: "+(mh+(Math.floor(t3/3*5))+" need "+heatreq));
 		}
 	}

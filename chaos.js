@@ -1231,7 +1231,7 @@ function retreat(){
 	//For my last 3 functions... I will write something truly unique...
 	//Judgement and salvation.
 	//One Destroys, the other Protects
-	//Then I will just add something that keeps all my units in my base. 
+	//Then I will just add something that keeps all my units in my base. xx
 
 //The idea with judgement is to take all my endgame extra units and distribute them evenly accross all my remaining nodes
 function judgement(units){

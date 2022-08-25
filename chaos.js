@@ -17,7 +17,7 @@ var myp, myc, ep, ec;
 var sct=false;
 
 var en;
-var heatreq;//Make sure this workss
+var heatreq;//Make sure this works
 
 const connection = new signalR.HubConnectionBuilder().withUrl(url).configureLogging(signalR.LogLevel.Information).build();
 
@@ -597,7 +597,7 @@ connection.on("ReceiveBotState", gameState => {
 	
 	//Set 
 	starve=false;
-	heatreq=heatreq-Math.floor(mwood/3*5));
+	heatreq=heatreq-Math.floor(mwood/3*5);
 	if(mwood<200000&&woodsup<500000&&heatreq>0){
 			starve=true;console.log("Starve Status:"+starve+" have: "+(mh+(Math.floor(mwood/3*5))+" need "+heatreq));
 	}

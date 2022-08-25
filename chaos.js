@@ -597,9 +597,23 @@ connection.on("ReceiveBotState", gameState => {
 	
 	//Set 
 	starve=false;
-	heatreq=heatreq-Math.floor((mw+offw+offwx)/3*5);
-	if(mwood<200000&&woodsup<500000&&heatreq>0&&bphase==3){
-			starve=true;console.log("Starve Status:"+starve+" need "+heatreq);
+	if(bphase==3&&mwood<200000&&woodsup<500000){
+		i=cycle;
+		j=mp;
+		t1=mf;
+		t2=0;
+		t3=mw+offw+offwx;
+		
+		nh=mh+(Math.floor(t3/3*5));
+		for(i=cycle;i<250;i++){
+			nh=nh-j;
+			if(i>(248-t2)){starve=false;break;}
+			if(nh<=0){starve=true;break;}
+			if(t1>0){t1=t1-j;t2++;}
+			if(j<30516){j=Math.ceil(j*1.05);}
+			else {j=Math.ceil(j*1.03);}
+		}
+		if(starve){console.log("Starve Status:"+starve+" should end:"+i+" offset:"+t2);}
 	}
 	
 	//??
@@ -944,7 +958,8 @@ connection.on("ReceiveBotState", gameState => {
 			
 		//Step 9: If still have units left here, Stockpile Heat for the future
 		if(ma>0&&heatreq>0){
-			if(mwood<500000&&woodsup<1000000&&bphase==3){nh=Math.floor((mw-p[6].tierResourceConstraints.wood-3)/3*5);}
+			
+			if(bphase==3&&mwood<500000&&mct==4){nh=Math.floor((mw-p[6].tierResourceConstraints.wood-3)/3*5);}
 			else if(a>0||bphase<3||mwood<500000){nh=Math.floor((mw-p[mct+1].tierResourceConstraints.wood-3)/3*5);}
 			else {nh=Math.floor((mw-3)/3*5);}
 			

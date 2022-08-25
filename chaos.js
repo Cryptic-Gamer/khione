@@ -598,23 +598,11 @@ connection.on("ReceiveBotState", gameState => {
 	//Set 
 	
 	starve=false;
-	if(bphase==3&&mwood<200000&&woodsup<1000000&&heatreq>0){
-		i=cycle;
-		j=mp;
-		t1=mf;
-		t2=0;
+	if(mwood<200000&&woodsup<500000&&heatreq>0){
 		t3=mw+offw+offwx;
-		
-		nh=mh+(Math.floor(t3/3*5));
-		for(i=cycle;i<250;i++){
-			nh=nh-j;
-			if(i>250-t2){starve=false;break;}
-			if(nh<=0){starve=true;break;}
-			if(t1>0){t1=t1-j;t2++;}
-			if(j<30516){j=Math.ceil(j*1.05);}
-			else {j=Math.ceil(j*1.03);}
+		if(mh+(Math.floor(t3/3*5))<heatreq){
+			starve=true;console.log("Starve Status:"+starve+" have: "+(mh+(Math.floor(t3/3*5))+" need "+heatreq));
 		}
-		if(starve){console.log("Starve Status:"+starve+" should end:"+i+" offset:"+t2);}
 	}
 	
 	//??

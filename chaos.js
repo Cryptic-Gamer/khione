@@ -17,7 +17,7 @@ var myp, myc, ep, ec;
 var sct=false;
 
 var en;
-var heatreq;//Make sure this works
+var heatreq;//Make sure this workss
 
 const connection = new signalR.HubConnectionBuilder().withUrl(url).configureLogging(signalR.LogLevel.Information).build();
 

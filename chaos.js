@@ -608,15 +608,13 @@ connection.on("ReceiveBotState", gameState => {
 		i=cycle;
 		j=mp;
 		t1=mf;
-		t2=0;
 		t3=mw+offw+offwx;
 		
 		nh=mh+(Math.floor(t3/3*5));
-		for(i=cycle;i<252;i++){
+		for(i=cycle;i<250;i++){
 			nh=nh-j;
-			if(i>(252-t2)){starve=false;break;}
+			if(i>250){starve=false;break;}
 			if(nh<=0){starve=true;break;}
-			if(t1>0){t1=t1-j;t2++;}
 			if(j<30516){j=Math.ceil(j*1.05);}
 			else {j=Math.ceil(j*1.03);}
 		}
@@ -1107,8 +1105,8 @@ function cut(){
 		if(r+wn[i][5]<minr||r+wn[i][5]>maxr){continue;}
 		if(wn[i][1]==0||wn[i][3]==0){continue;}
 		if(wn[i][3]>nw){ww=Math.ceil(nw/wn[i][2]);}
-		else {ww=Math.ceil(wn[i][3]/wn[i][2]);}
-		if(ma>100&&mp>5000){m.actions.push({"type" : 11,"units" : 10,"id" : wn[i][0]});ma=ma-10;}	
+		else {ww=Math.ceil(wn[i][3]/wn[i][2]);}	
+		if(ma>100&&mp>5000&&bt[wn[i][7]][wn[i]][0]=='T'){m.actions.push({"type" : 11,"units" : 10,"id" : tmWoodQ[i][2]});ma=ma-10;}
 		if(ma<ww){ww=ma;}
 		if(wn[i][1]<ww){ww=wn[i][1];}
 		if(ww>0){
@@ -1215,7 +1213,8 @@ function conquest(target){
 					
 				if(target[i][4]+target[i][8]>=nu){nu=nu-(target[i][4]+target[i][8]);}
 				
-				if(nu<=ma&&nu>0){m.actions.push({"type" : 11,"units" : nu,"id" : target[i][2]});ma=ma-nu;   
+				if(nu<=ma&&nu>0){
+								m.actions.push({"type" : 11,"units" : nu,"id" : target[i][2]});ma=ma-nu;   
 							   }
 				}}
 		}

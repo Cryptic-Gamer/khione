@@ -760,9 +760,12 @@ connection.on("ReceiveBotState", gameState => {
 								bt[ty][tx][0]='T';
 								nb.push([tx,ty,build[4][5],tmOuterBounds[i][2],t3*t2,t3*t2,t4*t2,bt[ty][tx][1]+build[4][7]+1,t3*t2,t4*t2]);
 								ma--;
+								
 
 						m.actions.push({"type" : 8,"units" : 1,"id" : tmOuterBounds[i][2]});
-						console.log("Build Lumber ADV:"+JSON.stringify({"type" : 8,"units" : 1,"id" : tmOuterBounds[i][2]})+" X:"+tx+" Y:"+ty);}						  
+						console.log("Build Lumber ADV:"+JSON.stringify({"type" : 8,"units" : 1,"id" : tmOuterBounds[i][2]})+" X:"+tx+" Y:"+ty);
+									break;					  
+														  }						  
 
 					}
 				}

@@ -1106,7 +1106,7 @@ function cut(){
 		if(wn[i][1]==0||wn[i][3]==0){continue;}
 		if(wn[i][3]>nw){ww=Math.ceil(nw/wn[i][2]);}
 		else {ww=Math.ceil(wn[i][3]/wn[i][2]);}	
-		if(ma>100&&mp>5000&&bt[wn[i][7]][wn[i]][0]=='T'){m.actions.push({"type" : 11,"units" : 10,"id" : wn[i][0]});ma=ma-10;}
+		if(ma>100&&mp>5000&&bt[wn[i][7]][wn[i][6]][0]=='T'){m.actions.push({"type" : 11,"units" : 10,"id" : wn[i][0]});ma=ma-10;}
 		if(ma<ww){ww=ma;}
 		if(wn[i][1]<ww){ww=wn[i][1];}
 		if(ww>0){
@@ -1231,7 +1231,7 @@ function retreat(){
 	//For my last 3 functions... I will write something truly unique...
 	//Judgement and salvation.
 	//One Destroys, the other Protects
-	//Then I will just add something that keeps all my units in my base. xx
+	//Then I will just add something that keeps all my units in my base. 
 
 //The idea with judgement is to take all my endgame extra units and distribute them evenly accross all my remaining nodes
 function judgement(units){

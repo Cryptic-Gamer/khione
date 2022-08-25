@@ -101,7 +101,7 @@ var bgain, bloss;
 
 var quad="";
 
-//build Array - Building, amount modifier, total cost, territory weight, size (according to the MT array), build time
+//build Array - Building, amount modisfier, total cost, territory weight, size (according to the MT array), build time
 build.push(['R', 1, 50, 35, 0, 1, 9, 2]);
 build.push(['Q', 1, 90, 45, 0, 2, 25, 5]);
 build.push(['F', 1, 50, 25, 0, 2, 25, 5]);

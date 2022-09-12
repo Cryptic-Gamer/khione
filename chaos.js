@@ -14,10 +14,12 @@ let m; //Moves
 var mx, my, ma, mp, ms, mct, mrn=0, mid; //x,y,available,population, scout, tier, resnodes
 var myp, myc, ep, ec;
 
+var wcut=0;
+
 var sct=false;
 
 var en;
-var heatreq;//Make sure this works
+var heatreq, heatres;//Make sure this works
 
 const connection = new signalR.HubConnectionBuilder().withUrl(url).configureLogging(signalR.LogLevel.Information).build();
 
@@ -51,17 +53,16 @@ var nu, radical;;
 var tn;//Temp Nodes
 
 var nt;
+var fpop;
 
 var mf, mw, mo, mh, mg; //Food, Wood, Stone, heat
 var nf, nw, ns, nh, ng; //Need Food, Wood, Stone, Heat
 var wf, ww, ws, wh, wg; //Worker food, wood, stone, heat
 var tx, ty, tp, np, ttp, tb, tid; //Temp Territory vars, X, y, new points, points(score), temporary Points,building 
-var starve=false;
+var starve, canstarve=false;;
 
 
 var fr=[]; //Future Resources
-var offw, offg, offs;//offset FR and account for Advancements (Had an issue where I would see more stone than I can farm because of lumber expantions that caused a lot of chaos in my build strat)
-var offwx, offgx, offsx;
 
 var cycle=0;
 var minr,maxr;
@@ -69,6 +70,8 @@ var minr,maxr;
 //just temp
 
 var mbuild=0, abuild;
+var cbuild;
+var compfarm=false;
 
 //More Lumbermills will free up more units  for Territory Conquest
 	
@@ -100,6 +103,7 @@ var bphase=1;
 var bgain, bloss;
 
 var quad="";
+var sdist, gdist, wdist;	
 
 //build Array - Building, amount modisfier, total cost, territory weight, size (according to the MT array), build time
 build.push(['R', 1, 50, 35, 0, 1, 9, 2]);
@@ -108,10 +112,8 @@ build.push(['F', 1, 50, 25, 0, 2, 25, 5]);
 build.push(['O', 1, 220, 110, 0, 3, 49, 10]);
 build.push(['L', 1, 40, 15, 0, 1, 9, 5]);
 
-
 var t1, t2, t3, t4, t5, t6, tcomp; //temporary variables for performance boosts
 var mwood, mstone, mgold, woodsup;
-var twr,tsr,tgr;	
 
 //Lastly Territory
 //Territory Vars Wood in Quadrant Own, [node, distance, ownpressure, enemypressure]
@@ -128,6 +130,8 @@ var twr,tsr,tgr;
 	var teOuterBounds=[]; //All Enemy nodes out of Range (For Cleanup)
 
 	var mz; //zone
+
+	var tunits=0;
 
 connection.on("ReceiveBotState", gameState => {
 
@@ -195,20 +199,28 @@ connection.on("ReceiveBotState", gameState => {
 	}
 	mp=b[mid].population;
 	
-	if(adv>0){advr=((cycle+adv)*10);}
+	if(adv>0){advr=((cycle+adv)*10)+1;}
 	else {advr=5000;}
 	
 	heatreq=(mh*-1);
 	
-	for(i=cycle;i<=252;i++){
+	for(i=cycle+1;i<250;i++){
+		
 		heatreq=heatreq+mp;
-		if(mp<30516){mp=Math.ceil(mp*1.05);}
+		t1=mp;
+		if(mp<=30516){mp=Math.ceil(mp*1.05);}
 		else {mp=Math.ceil(mp*1.03);}
+		
+		if(t1<50&&mp>50){mp=50;}
+		if(t1<273&&mp>273){mp=273;}
+		if(t1<1334&&mp>1334){mp=1334;}
+		if(t1<6398&&mp>6398){mp=6398;}
+		if(t1<30516&&mp>30516){mp=30516;}
+		if(t1<145442&&mp>145442){mp=145442;}
 	}
+	heatreq=heatreq+(2*mp);
 	
 	mp=b[mid].population;
-	
-	console.log("Current Heat Req:"+heatreq);
 	
 	abuild=0;
 	
@@ -224,12 +236,12 @@ connection.on("ReceiveBotState", gameState => {
 	}
 	
 	//console.log(JSON.stringify(b[mid].buildings));
-	
+	//small offset for off = status multipliers
 	fst=b[mid].statusMultiplier.foodReward;
 	mst=b[mid].statusMultiplier.goldReward;
 	wst=b[mid].statusMultiplier.woodReward;
 	
-	console.log("Current Status Multipliers: fst="+fst+",mst="+mst+",wst="+wst);
+	//console.log("Current Status Multipliers: fst="+fst+",mst="+mst+",wst="+wst);
 	
 	//Future Res: fr= id, action, units, total offset, type (stone or gold)
 	sct=false;
@@ -237,10 +249,7 @@ connection.on("ReceiveBotState", gameState => {
 	for(i = 0; i<b[mid].actions.length; i++){
 		tn=b[mid].actions[i];
 		
-		if(tn.actionType==1){
-			sct=true;
-		}
-		else if(tn.actionType==5){mw=mw-(Math.ceil(tn.numberOfUnits*3));mh=mh+(Math.ceil(tn.numberOfUnits/3)*5);}
+		if(tn.actionType==1){sct=true;}
 		else if(tn.actionType>5){
 			for(j=build.length-1;j>=0;j--){
 				if((build[j][0]=='L'&&tn.actionType==8)||
@@ -255,11 +264,8 @@ connection.on("ReceiveBotState", gameState => {
 			fr.push([tn.targetNodeId, tn.actionType, tn.numberOfUnits, 0, "", tn.tickActionCompleted]);
 		}
 	}
-
 	
-	//Loop All Actions and offset nodes
-	
-	
+	fr.sort(function(a,b){return a[5]-b[5]});
 	
 	t=[]; //x, y, id, my pressure, my units, enemy pressure (best), enemy units (best), distance, myinb, mycomp, enemyinb, encomp
 	en=[]; //x, y, id, my pressure, my units, enemy pressure (best), enemy units (best), distance, myinb, mycomp, enemyinb, encomp
@@ -297,7 +303,7 @@ connection.on("ReceiveBotState", gameState => {
 	//console.log("Enemy Borders:"+JSON.stringify(en));
 	for(k=s.length-1;k>=0;k--){
 		for(j=b[mid].map.scoutTowers.length-1;j>=0;j--){
-			if(s[k][0]==b[mid].map.scoutTowers[j]){s.splice(k, 1);console.log("Removed Tower");break;}
+			if(s[k][0]==b[mid].map.scoutTowers[j]){s.splice(k, 1);break;}
 		}
 	}
 	
@@ -307,7 +313,7 @@ connection.on("ReceiveBotState", gameState => {
 
 	for(j = w.map.nodes.length-1; j>=0; j--){
 		tn=w.map.nodes[j];
-		if(tn.amount<=0){continue;}
+		if(tn.amount<=100){continue;}
 		
 		tx=tn.position.x;ty=tn.position.y;
 		ds=bt[ty][tx][1]+tn.workTime;
@@ -356,17 +362,9 @@ connection.on("ReceiveBotState", gameState => {
 												   }
 		} 
 	
-	//Update NB
-	for(j = nb.length-1; j>=0; j--){
-		t1=true;ty=nb[j][1];tx=nb[j][0];
-		for(i = 0; i<b[mid].actions.length; i++){
-			tn=b[mid].actions[i];
-			if(tn.actionType>5&&tn.targetNodeId==nb[j][3]){t1=false;}
-		}
-		if(t1){nb.splice(j, 1);}
-		else{nb[j][7]=nb[j][7]-1;}
-		}
 	
+	
+	for(j = nb.length-1; j>=0; j--){if(nb[j][7]<r){nb.splice(j, 1);}}
 	
 	//Update Enemy Buildings
 	for(i = b.length-1; i>=0; i--){if(b[i].id==bi){continue;}
@@ -436,14 +434,17 @@ connection.on("ReceiveBotState", gameState => {
 									wn[j][2]=t3;
 									wn[j][4]=Math.round(t3/bt[t1[7]][t1[6]][1] * 100) / 100;	
 									wn[j][3]=tn.amount-(t5*t3)-(t2*t4);	
-									mwood=mwood+wn[j][3];
+									if(wn[j][3]>=t3){mwood=mwood+wn[j][3];}
 									if(wn[j][3]<=0){bt[t1[7]][t1[6]][0]='T';}
 									}
-								if(bt[t1[7]][t1[6]][0]=='EW'){
+								else if(bt[t1[7]][t1[6]][0]=='EW'){
 									wn[j][2]=t4;
 									wn[j][4]=Math.round(t4/bt[t1[7]][t1[6]][1] * 100) / 100;
-									wn[j][3]=tn.amount-(t5*t4)-(t2*tn.reward);	
+									wn[j][3]=tn.amount-(t5*t4)-(t2*t4);	
 									}
+								else {
+									wn[j][3]=tn.amount-(tn.currentUnits*tn.reward);
+								}
 							}woodsup=woodsup+wn[j][3];}
 						} else if(tn.type==2){
 							for(j=fn.length-1;j>=0;j--){t1=fn[j];if(t1[0]==tn.id){
@@ -454,47 +455,62 @@ connection.on("ReceiveBotState", gameState => {
 									fn[j][4]=Math.round(t3/bt[t1[7]][t1[6]][1] * 100) / 100;	
 									fn[j][3]=tn.amount-(t5*t3)-(t2*t4);	
 									}
-								if(bt[t1[7]][t1[6]][0]=='EF'){
-									fn[j][2]=Math.floor(tn.reward*0.7);
+								else if(bt[t1[7]][t1[6]][0]=='EF'){
+									fn[j][2]=t4;
 									fn[j][4]=Math.round(fn[j][2]/bt[t1[7]][t1[6]][1] * 100) / 100;	
-									fn[j][3]=tn.amount-(t5*t4)-(t2*tn.reward);	
+									fn[j][3]=tn.amount-(t5*t4)-(t2*t4);	
 									}
+								else {
+									fn[j][3]=tn.amount-(tn.currentUnits*tn.reward);
+								}
 							}}
 						} else if(tn.type==3){
 							for(j=sn.length-1;j>=0;j--){t1=sn[j];if(t1[0]==tn.id){
 								t3=tn.reward+mst;
 								
 								if(bt[t1[7]][t1[6]][0]=='T'){
-									sn[j][2]=tn.reward+mst;
+									sn[j][2]=t3;
 									sn[j][4]=Math.round(sn[j][2]/bt[t1[7]][t1[6]][1] * 100) / 100;	
 									sn[j][3]=tn.amount-(t5*t3)-(t2*t4);
 									mstone=mstone+sn[j][3];
 									}
-								if(bt[t1[7]][t1[6]][0]=='ES'){
-									sn[j][2]=Math.floor(tn.reward*0.7);
+								else if(bt[t1[7]][t1[6]][0]=='ES'){
+									sn[j][2]=t4;
 									sn[j][4]=Math.round(sn[j][2]/bt[t1[7]][t1[6]][1] * 100) / 100;		
-									sn[j][3]=tn.amount-(t5*t4)-(t2*tn.reward);	
+									sn[j][3]=tn.amount-(t5*t4)-(t2*t4);	
 									}	
+								else {
+									sn[j][3]=tn.amount-(tn.currentUnits*tn.reward);
+								}
 							}}
 						} else {
 							for(j=gd.length-1;j>=0;j--){t1=gd[j];if(t1[0]==tn.id){
 								t3=tn.reward+mst;
 								
 								if(bt[t1[7]][t1[6]][0]=='T'){
-									gd[j][2]=tn.reward+mst;
+									gd[j][2]=t4;
 									gd[j][4]=Math.round(gd[j][2]/bt[t1[7]][t1[6]][1] * 100) / 100;	
 									gd[j][3]=tn.amount-(t5*t3)-(t2*t4);	
 									mgold=mgold+gd[j][3];
 									}	
-								if(bt[t1[7]][t1[6]][0]=='EG'){
-									gd[j][2]=Math.floor(tn.reward*0.7);
+								else if(bt[t1[7]][t1[6]][0]=='EG'){
+									gd[j][2]=t4;
 									gd[j][4]=Math.round(gd[j][2]/bt[t1[7]][t1[6]][1] * 100) / 100;
-									gd[j][3]=tn.amount-(t5*t4)-(t2*tn.reward);	
+									gd[j][3]=tn.amount-(t5*t4)-(t2*t4);	
 									}
+								else {
+									gd[j][3]=tn.amount-(tn.currentUnits*tn.reward);
+								}
 							}}
 						}
 					}
 	
+	
+	if(mwood==0&&mct>1&&!compfarm){
+				console.log("Finished own wood Round:"+r+" total inactive units "+tunits);
+				
+				compfarm=true;
+				}
 	
 	//Defend if time...
 	tmWoodQ=[]; //Own Wood in Own Quadrent
@@ -542,35 +558,6 @@ connection.on("ReceiveBotState", gameState => {
 		for(j=gd.length-1;j>=0;j--){if(gd[j][0]==fr[k][0]){fr[k][3]=fr[k][2]*gd[j][2];fr[k][4]='G';}}
 	}
 	
-	offw=0; offg=0; offs=0;
-	offwx=0; offgx=0; offsx=0;
-	
-	for(k=fr.length-1;k>=0;k--){
-		
-		if(fr[k][5]<=advr){
-			if(fr[k][1]==4){offw=offw+fr[k][3];}
-				else if(fr[k][1]==2){
-					if(fr[k][4]=='S'){offs=offs+fr[k][3];}
-					else {offg=offg+fr[k][3];}
-				}
-				else {}
-		} else {
-			if(fr[k][1]==4){offwx=offwx+fr[k][3];}
-				else if(fr[k][1]==2){
-					if(fr[k][4]=='S'){offsx=offsx+fr[k][3];}
-					else {offgx=offgx+fr[k][3];}
-				}
-				else {}
-		}	
-			}
-	t1=p[mct].tierMaxResources;
-	if(mw+offw>t1.wood){offw=t1.wood-mw;}
-	if(mo+offs>t1.wood){offs=t1.stone-mo;}
-	if(mg+offg>t1.wood){offg=t1.gold-mg;}
-	   
-	console.log("Offsets Current: offw"+offw+" offs"+offs+" offg"+offg+" offwx"+offwx+" offsx"+offsx+" offgx"+offgx);
-	
-	mwood=mwood+offw+offwx;
 	
 	wn.sort(function(a,b){return b[4]-a[4]});
 	fn.sort(function(a,b){return b[4]-a[4]});
@@ -594,34 +581,76 @@ connection.on("ReceiveBotState", gameState => {
 		}
 	}
 	
-	console.log("My Territorial Res left: W="+mwood+" S="+mstone+" G="+mgold);
-
+	//console.log("My Territorial Res left: W="+mwood+" S="+mstone+" G="+mgold);
 	//console.log("Future Farm Vars:"+JSON.stringify(fr));
+
+	//New Starve Function (Just work with the already existing heatreq)
 	
-	//Try running Woodsup only on nodes in own territory but set to 200 000
+	heatres=0;
+	heatreq=heatreq-(Math.floor(mw/3)*5);
 	
-	//set starve to 
+	//Add inbound wood to heatreq
+	heatres=Math.floor(mwood/3)*5;
 	
-	//Set 
+	if(starve>0){}
+	
+	cbuild=true;
+	if(heatreq<heatres+200000){
+			//console.log("HAVE NEEDS: DEFEND LANDS");
+			cbuild=false;}
+	else {
+			//console.log("STILL NEED SOME WOOD: TAKE LANDS");
+		 	
+		 }
+	
+	//Set Sabotage here...
+		//If have own heat, just grill others
+	
+	/*
+	if(canstarve&&starve<=0&&mct==5){
+	   if(heatreq-heatres>0){
+		   			
+		   			if(heatreq-heatres>4700000){starve=7;}
+		   			else if(heatreq-heatres>3500000){starve=6;}
+		   			else if(heatreq-heatres>2800000){starve=5;}
+		   			else if(heatreq-heatres>1500000){starve=4;}
+		   			else if(heatreq-heatres>1000000){starve=3;}
+		   			else if(heatreq-heatres>500000){starve=2;}
+		   			else{starve=1;}
+					console.log("Trouble with resources, Stunt Growth: need "+heatreq+" wood reserves "+heatres);
+				}
+	   }
+	
+	*/
+	
 	starve=false;
-	if(bphase==3&&mwood<100000&&woodsup<2000000&&heatreq>0){
+	if((mp>20000||canstarve)&&heatreq>0){
 		i=cycle;
 		j=mp;
 		t1=mf;
-		t3=mw+offw+offwx;
-		
-		nh=mh+(Math.floor(t3/3*5));
+		t2=0;
+		nh=mh+(Math.floor(heatres/3*5));
 		for(i=cycle;i<250;i++){
 			nh=nh-j;
-			if(i>250){starve=false;break;}
+			if(i>(249-t2)){starve=false;break;}
 			if(nh<=0){starve=true;break;}
+			if(t1>0){t1=t1-j;t2++;}
+			t3=j;
 			if(j<30516){j=Math.ceil(j*1.05);}
 			else {j=Math.ceil(j*1.03);}
-		}
-		if(starve){console.log("Starve Status:"+starve+" should end:"+i+" offset:"+t2);}
+			
+			if(t3<145442&&j>145442){j=145442;}
+			}
+		
+		if(starve){
+			canstarve=true;
+		   console.log("Starve Status:"+starve+" should end:"+i+" offset:"+t2);
+			console.log("State of Heat Requirements: heatreq: "+heatreq+" heat from wood reserves: "+heatres+" need "+(heatreq-heatres));
+		   }
+		
 	}
 	
-	//??
+	if(mwood==0){}
 	
 	//Consider Emptying "Hot Bases" first
 		//This would look like: "If Base was taken over"
@@ -630,94 +659,81 @@ connection.on("ReceiveBotState", gameState => {
 		//Dont takeover empty wood lots. 
 	
 	
-	minr=0;maxr=2499;
+	
 	
 	if(ma>0){
-		  	if(r%30==0){ender();}
-			else {retreat();}	
+		  	//if(r%30==0){ender();}
+			//else {retreat();}	
 		}
-	
 	
 	//Step 1: Try and get what I need to maintain population (Complete)
 	if(ma>0){
 		
-		calcNeeds();
+		nf=(mf*-1);nh=(mh*-1);
+		wcut=(mw*-1)+Math.ceil(mp*4*5/3);
+		if(wcut<0){wcut=0;}
+		nw=wcut;
 		
-		nf=nf+mp;
+		
+		
+		for(k=fr.length-1;k>=0;k--){if(fr[k][1]==3){nf=nf-fr[k][3];}}
+		
+		t1=0;
+		nf=nf+mp;if(nf>0){t1=t1+nf;}
 		nh=nh+mp;
 		
 		farm();
 		burn();
-		cut();
 		
-		//Step 2: Try and get what I need to advance population (Complete)
 		
-			for(j=0;j<4;j++){if(ma<=0){break;}
-				nf=nf+Math.ceil(mp/1.2);
+			for(j=0;j<3;j++){if(ma<=0){break;}
+					 
+							 
+				nf=nf+Math.ceil(mp/1.2);if(nf>0){t1=t1+nf;}
 				nh=nh+Math.ceil(mp/0.9);
-				
+							 
 				farm();		 
 				burn();
-				cut();
+				
 			}
+		
+		wcut=nw;
+		if(wcut>0&&r<1500){console.log("Need Wood: "+nw);}
+		cut();
+		if(nw>0){wcut=wcut-nw;}
+		
 		}
 	
 		//Step 3: Scout (Complete)
 		scout();
 		
-		//Step 4: Make sure I have enough food for next advancement (only if ADV near)
+		//Step 4 handle all food: Make sure I have enough food for next advancement (only if ADV near)
 			//This tweak seems reasonable and could lower my onhand food requirements even further. Always best to try and push extra units down the funnel so other advancement strategies take preference.
 		if(ma>0&&adv>0&&adv<=2){
-			nf=nf+(p[mct+1].tierResourceConstraints.food-(Math.ceil(mp/1.2)*3));
+			nf=nf+(p[mct+1].tierResourceConstraints.food-t1);if(nf>0){t1=t1+nf;}
+			farm();
+		}
+		if(ma>0&&r>2450){
+			nf=nf+(p[mct].tierMaxResources.food-t1);
+			
+			for(k=fr.length-1;k>=0;k--){
+				if(fr[k][1]==3){nf=nf-fr[k][3];}
+				else {}
+			}
+			
 			farm();
 		}
 		
+		if(r>460 && r<500){
+	   //console.log("FR"+JSON.stringify(fr));
+		//console.log("NB"+JSON.stringify(nb));
+	   }
+	
+	
 		//Step 5: Build for territory as best I can
-		
-		//Build Phase 3
-			//calculate the advantage that building would give (Speed boost)
-			//if unit advantage exceeds replacement costs - build
-		
-		
-		//set and calculate an afford variable
-			//If I cant afford anything, allow unthrottled heat
+		if(ma>0&&cbuild){
 			
-		//bphase 3 calculate value of lumbermill
-			//If high, allow unthrottled heat
-		
-		
-	
-	
-		if(ma>0){
-			
-			wr=mw;
-			gr=mg;
-			sr=mo;
-			
-			if(adv>0){
-				t1=p[mct+1].tierResourceConstraints;
-				
-			    wr=wr-t1.wood-1;
-				gr=gr-t1.gold-1;
-				sr=sr-t1.stone-1;
-			   }
-			
-			if(bphase==3){
-				
-				//console.log("Setting Constraints to MAX here before building Lumber");
-				
-				t1=p[6].tierResourceConstraints;
-				
-			    wr=wr-t1.wood-1;
-				gr=gr-t1.gold-1;
-				sr=sr-t1.stone-1;
-			   }
-			
-			
-			//Readjust offsets from already built buildings
-			for(i = nb.length-1; i>=0; i--){wr=wr-nb[i][4];sr=sr-nb[i][5];gr=gr-nb[i][6]; }
-			
-			//console.log("Can Build Wood:"+wr+" Stone:"+sr+" Gold:"+gr);
+			//if(bphase<3){console.log("Can Build Wood:"+wr+" Stone:"+sr+" Gold:"+gr);}
 			
 			//calculate building territory weights
 			for(j = build.length-1; j>=0; j--){
@@ -733,46 +749,7 @@ connection.on("ReceiveBotState", gameState => {
 			else if(bphase==3){canbuild=['L'];}//Just lumber, No sort
 			else {}
 			
-			
-			//Building Phase 3
-			if(bphase==3){
-				
-				t1=build[4][0];	
-				t2=build[4][1];	
-				t3=build[4][2];	
-				t4=build[4][3];	
-				t5=build[4][5];
-				
-				bgain=Math.floor((mwood/wst+3)-(mwood/(wst)));
-				bloss=Math.ceil((t3*t2/wst)+(t3*t2/mst)+(t4*t2/mst));
-				
-				//console.log("Gain "+bgain+" vs "+bloss+" Loss");
-				
-				if(bgain - bloss > 10000){
-				tmOuterBounds.sort(function(a,b){return b[7]-a[7]});
-				
-				for(i=0;i<tmOuterBounds.length;i++){
-					tx=tmOuterBounds[i][1];
-					ty=tmOuterBounds[i][0];
-					if(bt[ty][tx][0]=='E'){
-						if(wr>t3*t2&&wr>=t3*t2&&wr>=t4*t2){mbuild++;
-								
-								bt[ty][tx][0]='T';
-								nb.push([tx,ty,build[4][5],tmOuterBounds[i][2],t3*t2,t3*t2,t4*t2,bt[ty][tx][1]+build[4][7]+1,t3*t2,t4*t2]);
-								ma--;
-								
-
-						m.actions.push({"type" : 8,"units" : 1,"id" : tmOuterBounds[i][2]});
-						console.log("Build Lumber ADV:"+JSON.stringify({"type" : 8,"units" : 1,"id" : tmOuterBounds[i][2]})+" X:"+tx+" Y:"+ty);
-									break;					  
-														  }						  
-
-					}
-				}
-			}
-				
-			}
-			
+				//Not Building ANY more lumber here
 			
 			if(bphase==1||bphase==2){
 			//console.log("Building Phase Active :"+bphase);
@@ -784,10 +761,12 @@ connection.on("ReceiveBotState", gameState => {
 				ty=a[j].position.y;
 				if(bt[ty][tx][0]=='T'){continue;}
 				
+				t2=0;t3=0;t4=0;
+				
 				tid=a[j].id;
 				t2=calcScore(1);
 				t3=calcScore(2);
-				t4=calcScore(3);
+				if(bphase==1){t4=calcScore(3);}
 				if(t2+t3+t4>0){mt.push([tx,ty,tid,calcScore(1),calcScore(2),calcScore(3)]);}
 			}
 			
@@ -811,34 +790,47 @@ connection.on("ReceiveBotState", gameState => {
 					if(mt[0][t5+2]==0){continue;}
 					
 					tx=mt[0][0];ty=mt[0][1];tid=mt[0][2];	
-					tcomp=bt[ty][tx][1]+build[j][7];
+					tcomp=bt[ty][tx][1]+build[j][7]+r;
 					
-					twr=wr;tsr=sr;tgr=gr;
-
+					wr=mw;gr=mg;sr=mo;
+					
+					//if(r>450&&r<500){console.log("Current variables:"+canbuild[i]+" curr Vars: wr-"+wr+" sr-"+sr+" gr-"+gr);}	
+						
 					for(k=fr.length-1;k>=0;k--){
-						if(fr[k][5]<tcomp+r){
-							if(fr[k][1]==4){twr=twr+fr[k][3];}
+						if(fr[k][5]<tcomp){
+							if(fr[k][1]==4){wr=wr+fr[k][3];}
 							else if(fr[k][1]==2){
-								if(fr[k][4]=='S'){tsr=tsr+fr[k][3];}
-								else {tgr=tgr+fr[k][3];}
+								if(fr[k][4]=='S'){sr=sr+fr[k][3];}
+								else {gr=gr+fr[k][3];}
 							}
 							else {}
+							if(tcomp<advr){
+								if(gr>p[mct].tierMaxResources.gold){gr=p[mct].tierMaxResources.gold;}
+								if(wr>p[mct].tierMaxResources.wood){wr=p[mct].tierMaxResources.wood;}
+								if(sr>p[mct].tierMaxResources.stone&&mct>0){sr=p[mct].tierMaxResources.stone;}
+													
+							} 	
+							else{
+									if(gr>p[mct+1].tierMaxResources.gold){gr=p[mct+1].tierMaxResources.gold;}
+									if(wr>p[mct+1].tierMaxResources.wood){wr=p[mct+1].tierMaxResources.wood;}
+									if(sr>p[mct+1].tierMaxResources.stone){sr=p[mct+1].tierMaxResources.stone;}
+							}
 						}
 					}	
+						
+					//if(r>450&&r<500){console.log("Current variables curr Vars 2: wr-"+wr+" sr-"+sr+" gr-"+gr);}
+						
+					for(k = nb.length-1; k>=0; k--){wr=wr-nb[k][4];sr=sr-nb[k][5];gr=gr-nb[k][6];}
+						
+					//if(r>450&&r<500){console.log("Current variables curr Vars 3: wr-"+wr+" sr-"+sr+" gr-"+gr);}
 					
-					if(tcomp+r<advr){
-						if(tgr>p[mct].tierMaxResources.gold){tgr=p[mct].tierMaxResources.gold;}
-						if(twr>p[mct].tierMaxResources.wood){twr=p[mct].tierMaxResources.wood;}
-						if(tsr>p[mct].tierMaxResources.stone&&build[4][1]>1){tsr=p[mct].tierMaxResources.stone;}
-					}
-					
-					//console.log("Trying:"+canbuild[i]+" End Vars: twr-"+twr+" t3*t2-"+(t3*t2)+" tsr-"+tsr+" t3*t2-"+(t3*t2)+" tgr-"+tgr+" t4*t2-"+(t4*t2));
-					
-					if(twr>t3*t2&&tsr>=t3*t2&&tgr>=t4*t2){mbuild++;
-
+					if(wr>t3*t2&&sr>=t3*t2&&gr>=t4*t2){mbuild++;
+						
+						console.log("Trying:"+canbuild[i]+" End Vars: wr-"+wr+" t3*t2-"+(t3*t2)+" sr-"+sr+" t3*t2-"+(t3*t2)+" gr-"+gr+" t4*t2-"+(t4*t2));							  
+														  
 						bt[ty][tx][0]='T';
 
-						nb.push([tx,ty,build[j][5],tid,t3*t2,t3*t2,t4*t2,tcomp+1,t3*t2,t4*t2]);
+						nb.push([tx,ty,build[j][5],tid,t3*t2,t3*t2,t4*t2,tcomp]);
 														  
 						ma--;
 
@@ -864,78 +856,116 @@ connection.on("ReceiveBotState", gameState => {
 												  
 			}}
 			}
-			
-			
-			
 		}
-		
-		if(ma>0){
-			//Account for all res already harvested? 
-			t1=p[mct].tierMaxResources;
-			
-			ns=(mo*-1)-offs;
-			ng=(mg*-1)-offg;
-			nw=(mw*-1)-offw;
-			
-			nw=nw+t1.wood;
-			ns=ns+t1.stone;
-			ng=ng+t1.gold;
-			
-			mineSN();
-			mineGD();
-		}
-		
 	
+	
+	//Simplified Stone (Rewrite 11 September 2022 after seeing the Matrix) Rebuilt the way I handle Stone, wood and gold.
+
+	if(ma>0&&sn.length>0){
+		ns=mo;//console.log("Stone Reserves:"+ns);
+		sdist=sn[0][5]+r;
 		
-	
-		//Lets Future Farm only chosen once for every building
-	
-		if(ma>0&&nb.length>0){
-				for(j = nb.length-1; j>=0; j--){
-					minr=r+nb[j][7]+1;
-					if(ns<=0&&ns+nb[j][8]>0){
-						ns=ns+nb[j][8];
-						console.log("FF Build Stone:"+ns);
-						mineSN();
-						if(ns<0){ns=0;}
-						nb[j][8]=ns;
+		//Handle Buildings
+		for(j = nb.length-1; j>=0; j--){if(nb[j][7]<sdist){ns=ns-nb[j][5];}}//console.log("Need Stone After Build:"+ns);
+		
+		//future farmed res here
+		for(k=fr.length-1;k>=0;k--){
+						if(fr[k][5]<sdist&&fr[k][1]==2&&fr[k][4]=='S'){
+							ns=ns+fr[k][3];
+						}
 					}
-					
-					if(ng<=0&&+ng+nb[j][9]>0){
-						ng=ng+nb[j][9];
-						console.log("FF Build Gold:"+ng);
-						mineGD();
-						if(ng<0){ng=0;}
-						nb[j][8]=ng;
-					}
-					
-					
-				}
-			}
 		
+		//console.log("Have Stone After Mine:"+ns);
+		
+		if(sdist>advr){ns=p[mct+1].tierMaxResources.stone-ns;}
+		else{ns=p[mct].tierMaxResources.stone-ns;}
+		
+		if(ns>0&&r<1500){console.log("Atttempt to mine stone:"+ns);}
+		mineSN();
+	}
+	
+	//Simplified Gold
+	if(ma>0&&gd.length>0){
+		ng=mg;
+		gdist=gd[0][5]+r;
+		
+		for(j = nb.length-1; j>=0; j--){if(nb[j][7]<gdist){ng=ng-nb[j][6];}}//console.log("Need Gold After Build:"+ng);
+		
+		//future farmed res here
+		for(k=fr.length-1;k>=0;k--){
+						if(fr[k][5]<gdist&&fr[k][1]==2&&fr[k][4]=='G'){
+							ng=ng+fr[k][3];
+						}
+					}
+		
+		//console.log("Have Gold After Mine:"+ng);
+		
+		if(gdist>advr){ng=p[mct+1].tierMaxResources.gold-ng;}
+		else{ng=p[mct].tierMaxResources.gold-ng;}
+		
+		if(ng>0&&r<1500){console.log("Atttempt to mine gold:"+ng);}	
+				 
+		mineGD();
+	}	
+	
+	//Simplified Wood
+	if(ma>0&&wn.length>0){
+		nw=mw+wcut;
+		wdist=wn[0][5]+r;
+		
+		for(j = nb.length-1; j>=0; j--){if(nb[j][7]<wdist){nw=nw-nb[j][4];}}//console.log("Need wood After Build:"+ns);
+		
+		//future farmed res here
+		for(k=fr.length-1;k>=0;k--){
+						if(fr[k][5]<wdist&&fr[k][1]==4){
+							nw=nw+fr[k][3];
+						}
+					}
+		
+		//console.log("Have Wood After Cut:"+nw);
+		
+		if(wdist>advr){nw=p[mct+1].tierMaxResources.wood-nw;}
+		else{nw=p[mct].tierMaxResources.wood-nw;}
+		
+		if(nw>0&&r<1500){console.log("Attempt to cut Wood:"+nw);}	
+				 
+		cut();
+	}	
+	
+		//New Wood StRategy to impliment 9 September 2022 (Saw the light on 11 september)
+			//Currently im throttling my harvesting to max storages... Problem identiefied is that wood is comming in in drips and drabs.
+			//What I want to do is to allow my units to farm wood and allow my units to cap my resources every turn...
+			//This will result in overdrive and possible resource spillage...
+			//so look carefully 
+	
+		//Two variables will be needed:
+			//How much wood will I still be able to handle 
+	
 		//Only Future Farm building from best stone supply...
+		
+			
+		//Step 9: If still have units left here, Stockpile Heat for the future
+		if(ma>0&&heatreq>0){
+			
+			if(mct>=4&&bphase==3&&mwood<200000){nh=Math.floor((mw-p[6].tierResourceConstraints.wood-3)/3*5);}
+			else if(adv>0&&mct<6){nh=Math.floor((mw-p[mct+1].tierResourceConstraints.wood-3)/3*5);}
+			else {nh=Math.floor((mw-3)/3*5);}
+			
+			for(j = nb.length-1; j>=0; j--){nh=nh-(Math.ceil((nb[j][4]-3)/3)*5);}
+			
+			burn();
+			cut();
+			
+		   }
+		
+		//Units left? 
+			//Try and assign burners
 	
-		minr=0;	
-		//Step 8: Finish Wood Req above
-		if(ma>0){cut();}
-		
-		//Step 9: If closest gathering will happen after my uptick, allow early harvest. Harvest evenly so that I have more build options
-		if(ma>0&&adv>0){
-				minr=(cycle+adv)*10+2;maxr=minr+7;
-				
-				if(sn.length>0){if(r+sn[0][5]>minr&&r+sn[0][5]<maxr){
-					ns=ns-offsx;ns=ns+p[mct+1].tierMaxResources.stone-p[mct].tierMaxResources.stone;
-					mineSN();console.log("FFI Stone");}}
-				if(gd.length>0){if(r+gd[0][5]>minr&&r+gd[0][5]<maxr){
-					ng=ng-offgx;ng=ng+p[mct+1].tierMaxResources.gold-p[mct].tierMaxResources.gold;
-					mineGD();console.log("FFI Gold");}}
-				if(wn.length>0){if(r+wn[0][5]>minr&&r+wn[0][5]<maxr){
-					nw=nw-offgx;nw=nw+p[mct+1].tierMaxResources.wood-p[mct].tierMaxResources.wood;
-					cut();console.log("FFI Wood");}}
-		}
-		
-		
-		minr=0;maxr=2499;
+		//No Overcharge
+			//Rather Optimize territory
+	
+		//Just control?
+	
 	
 		//Territory Plug...	
 	
@@ -959,58 +989,20 @@ connection.on("ReceiveBotState", gameState => {
 		tmOtherO.sort(function(a,b){return a[7]-b[7]});	
 		teWoodO.sort(function(a,b){return a[7]-b[7]});
 		teOtherO.sort(function(a,b){return a[7]-b[7]});	
+		
+		//conquest(teWoodQ);	
+		
+		//Revised Stockpile Strategy
+		
+			//Priority 1: burn what I have... 
+			//Priority 2: allow farm maximum storage...	
 	
-		conquest(teWoodQ);	
-		
-		
-			
-		//Step 9: If still have units left here, Stockpile Heat for the future
-		if(ma>0&&heatreq>0){
-			
-			if(bphase==3&&mwood<500000&&mct==4){nh=Math.floor((mw-p[6].tierResourceConstraints.wood-3)/3*5);}
-			else if(a>0||bphase<3||mwood<500000){nh=Math.floor((mw-p[mct+1].tierResourceConstraints.wood-3)/3*5);}
-			else {nh=Math.floor((mw-3)/3*5);}
-			
-			burn();
-			
-		   cut();
-		   }
-		
-		//Step 10: If I still have units left here, Fill Food storages (Only Endgame for the sake of Starve)
-		if(ma>0&&r>2450){
-			nf=(mf*-1);
-			nf=nf+p[mct].tierMaxResources.food;
-			
-			for(k=fr.length-1;k>=0;k--){
-				if(fr[k][1]==3){nf=nf-fr[k][3];}
-				else {}
-			}
-			
-			farm();
-		}
-		
-		if(ma>0&&adv>0){
-				//console.log("Attempting Next Future Farm if still have units: "+adv+" try "+ma+" units");
-				minr=((cycle+adv+1)*10)+2;
-				
-				ng=ng-offgx;
-				nw=nw-offgx;
-				ns=ns-offgx;
-			
-				nw=nw+p[mct+1].tierMaxResources.wood-p[mct].tierMaxResources.wood;
-				ns=ns+p[mct+1].tierMaxResources.stone-p[mct].tierMaxResources.stone;
-				ng=ng+p[mct+1].tierMaxResources.gold-p[mct].tierMaxResources.gold;
-				
-				mineSN();
-				mineGD();
-				
-				cut();
-		}
 		
 	
-		conquest(teWoodO);	
-		conquest(teOtherO);
-		conquest(teOtherQ);	
+	
+		//conquest(teWoodO);	
+		//conquest(teOtherO);
+		//conquest(teOtherQ);	
 		
 		if(ma>0&&ma>2000&&r<2450){
 			
@@ -1026,20 +1018,22 @@ connection.on("ReceiveBotState", gameState => {
 			teWoodO.sort(function(a,b){return b[7]-a[7]});
 			teOtherO.sort(function(a,b){return b[7]-a[7]});	
 			
-			judgement(Math.ceil(ma/2));
-			salvation(Math.floor(ma))
+			//judgement(Math.ceil(ma/2));
+			//salvation(Math.floor(ma))
 		  } 
 	
-		console.log("Population: "+mp);	
-	//console.log("My Quadrent:"+quad);
+		if(r%10==1){console.log("Population: "+mp);}
 	
+	if(r==2499){console.log("End Population:"+mp+" heatreq "+heatreq);}
 	
-	console.log("Tried to build:"+mbuild+" actually built:"+abuild);
-	
-	if(ma>0){
-		console.log("Available Units left after: "+ma);
+	if(mbuild+nb.length!=abuild&&(r<1000||r==2499)){
+		console.log("Tried to build:"+mbuild+" actually built:"+abuild+JSON.stringify(" Pending:"+JSON.stringify(nb)));
 	}
 	
+	if(ma>0){
+		//console.log("Available Units left after: "+ma);
+		tunits=tunits+ma;
+	}
 	
 	if(m!=""){
 		connection.invoke("SendPlayerCommand", m);
@@ -1078,19 +1072,13 @@ function bR(td){
     return (((((td>0)?td:(-td))%1)===0.5)?((0===(tr%2))?tr:(tr-1)):tr);
 };
 
-
-function calcNeeds(){
-			nf=(mf*-1);nh=(mh*-1);ns=(mo*-1)-offs;ng=(mg*-1)-offg;nw=(mw*-1)-offw;
-			for(k=fr.length-1;k>=0;k--){if(fr[k][1]==3){nf=nf-fr[k][3];}}
-		}
-
 function farm(){
 	wf=0;
 	for(i = 0; i<fn.length; i++){if(nf<1||ma<=0||starve){break;}
 		if(r+fn[i][5]<minr||r+fn[i][5]>maxr){continue;}
 		if(fn[i][1]==0||fn[i][3]==0){continue;}
 		if(fn[i][3]>nf){wf=Math.ceil(nf/fn[i][2]);}
-		else {wf=Math.ceil(fn[i][3]/fn[i][2]);}					 
+		else {wf=Math.floor(fn[i][3]/fn[i][2]);}					 
 		if(ma<wf){wf=ma;}
 		if(fn[i][1]<wf){wf=fn[i][1];}					 
 		if(wf>0){m.actions.push({"type" : 3,"units" : wf,"id" : fn[i][0]});ma=ma-wf;
@@ -1107,9 +1095,8 @@ function cut(){
 	for(i = 0; i<wn.length; i++){if(nw<1||ma<=0){break;}
 		if(r+wn[i][5]<minr||r+wn[i][5]>maxr){continue;}
 		if(wn[i][1]==0||wn[i][3]==0){continue;}
-		if(wn[i][3]>nw){ww=Math.ceil(nw/wn[i][2]);}
-		else {ww=Math.ceil(wn[i][3]/wn[i][2]);}
-		if(ma>100&&mp>5000&&bt[wn[i][7]][wn[i][6]][0]=='T'){m.actions.push({"type" : 11,"units" : 10,"id" : wn[i][0]});ma=ma-10;}
+		if(wn[i][3]>nw){ww=Math.floor(nw/wn[i][2]);}
+		else {ww=Math.floor(wn[i][3]/wn[i][2]);}
 		if(ma<ww){ww=ma;}
 		if(wn[i][1]<ww){ww=wn[i][1];}
 		if(ww>0){
@@ -1117,7 +1104,7 @@ function cut(){
 				 			wn[i][3]=wn[i][3]-(ww*wn[i][2]);
 							nw=nw-(ww*wn[i][2]);
 				 			wn[i][1]=wn[i][1]-ww;
-							}
+							}						 
 	}
 }
 
@@ -1127,8 +1114,8 @@ function mineSN(){
 	for(i = 0; i<sn.length; i++){if(ns<1||ma<=0){break;}
 		if(r+sn[i][5]<minr||r+sn[i][5]>maxr){continue;}
 		if(sn[i][1]==0||sn[i][3]==0){continue;}
-		if(sn[i][3]>ns){ws=Math.ceil(ns/sn[i][2]);}
-		else {ws=Math.ceil(sn[i][3]/sn[i][2]);}
+		if(sn[i][3]>ns){ws=Math.floor(ns/sn[i][2]);}
+		else {ws=Math.floor(sn[i][3]/sn[i][2]);}
 		if(ma<ws){ws=ma;}
 		if(sn[i][1]<ws){ws=sn[i][1];}					 
 		if(ws>0){m.actions.push({"type" : 2,"units" : ws,"id" : sn[i][0]});ma=ma-ws;
@@ -1145,8 +1132,8 @@ function mineGD(){
 	for(i = 0; i<gd.length; i++){if(ng<1||ma<=0){break;}
 		if(r+gd[i][5]<minr||r+gd[i][5]>maxr){continue;}
 		if(gd[i][1]==0||gd[i][3]==0){continue;}
-		if(gd[i][3]>ng){wg=Math.ceil(ng/gd[i][2]);}
-		else {wg=Math.ceil(gd[i][3]/gd[i][2]);}
+		if(gd[i][3]>ng){wg=Math.floor(ng/gd[i][2]);}
+		else {wg=Math.floor(gd[i][3]/gd[i][2]);}
 		if(ma<wg){wg=ma;}
 		if(gd[i][1]<wg){wg=gd[i][1];}					 
 		if(wg>0){m.actions.push({"type" : 2,"units" : wg,"id" : gd[i][0]});ma=ma-wg;
@@ -1193,8 +1180,8 @@ function calcScore(ti){
 				t1=bt[k][i][0];
 				np=0;
 				if(t1=='F'||t1=='N'||t1=='W'||t1=='S'||t1=='G'){np=np+1;}		
-				if(t1=='W'){np=np+1;}
-				if(t1=='S'||t1=='G'){np=np+3;}
+				if(t1=='W'){np=np+1;if(bphase==2){np=np+2;}}
+				if(t1=='S'||t1=='G'){np=np+3;if(bphase==2){np=np+3;}}
 									  
 				if(bphase==1&&iq){np=np/3;}	
 				tp=tp+np;
@@ -1240,7 +1227,7 @@ function judgement(units){
 	t1=teWoodO.length+teWoodQ.length+teOtherQ.length+teOtherO.length;
 	t2=Math.floor(units/20);
 	if(t2>0){
-		console.log("Let there be Judgement:"+t2);
+		//console.log("Let there be Judgement:"+t2);
 		for(i=teWoodQ.length-1;i>=0;i--){if(units>0){m.actions.push({"type" : 11,"units" : t2,"id" : teWoodQ[i][2]});ma=ma-t2;units=units-t2;}}
 		for(i=teWoodO.length-1;i>=0;i--){if(units>0){m.actions.push({"type" : 11,"units" : t2,"id" : teWoodO[i][2]});ma=ma-t2;units=units-t2;}}
 		for(i=teOtherQ.length-1;i>=0;i--){if(units>0){m.actions.push({"type" : 11,"units" : t2,"id" : teOtherQ[i][2]});ma=ma-t2;units=units-t2;}}
@@ -1253,7 +1240,7 @@ function salvation(units){
 	t1=tmWoodO.length+tmWoodQ.length+tmOtherQ.length+tmOtherO.length;
 	t2=Math.floor(units/20);
 	if(t2>0){
-		console.log("Let there be Salvation:"+t2);
+		//console.log("Let there be Salvation:"+t2);
 		for(i=tmWoodQ.length-1;i>=0;i--){if(units>0){m.actions.push({"type" : 11,"units" : t2,"id" : tmWoodQ[i][2]});ma=ma-t2;units=units-t2;}}
 		for(i=tmWoodO.length-1;i>=0;i--){if(units>0){m.actions.push({"type" : 11,"units" : t2,"id" : tmWoodO[i][2]});ma=ma-t2;units=units-t2;}}
 		for(i=tmOtherQ.length-1;i>=0;i--){if(units>0){m.actions.push({"type" : 11,"units" : t2,"id" : tmOtherQ[i][2]});ma=ma-t2;units=units-t2;}}

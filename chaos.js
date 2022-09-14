@@ -685,7 +685,7 @@ connection.on("ReceiveBotState", gameState => {
 			farm();
 		}
 	
-		if(ma>0&&(heatreq-heatres)<0){
+		if(ma>0||mct>=5){
 			nf=nf+(p[mct].tierMaxResources.food-t1);
 			
 			for(k=fr.length-1;k>=0;k--){
@@ -724,7 +724,7 @@ connection.on("ReceiveBotState", gameState => {
 		//Step 5: Build for territory as best I can
 	
 		
-		if(ma>0&&heatreq-heatres>0){
+		if(ma>0){
 			
 			//calculate building territory weights
 			for(j = build.length-1; j>=0; j--){
@@ -844,6 +844,13 @@ connection.on("ReceiveBotState", gameState => {
 	//Minor Takeovers, anything under 2 Units
 	
 	
+	
+	
+	
+	
+	
+	
+	
 	//Simplified Stone (Rewrite 11 September 2022 after seeing the Matrix) Rebuilt the way I handle Stone, wood and gold. 
 		//Applied that to buildings as well. Exposed so much other bugs in my code in the process. 
 	
@@ -925,16 +932,16 @@ connection.on("ReceiveBotState", gameState => {
 			
 	
 		//Cant really do this too early and it will really disrupt others
-		if(needwood>0&&woodsup>0&&ma>0){
+		if(woodsup>0&&ma>0){
 			  //conquest nearest enemy wood
 				console.log("Initiating Basic Territory with "+ma+" units");
 		
 					wn.sort(function(a,b){return a[8]-b[8]});
 					//sort according to distance on enemy arrays...
 
-					conquest(enemyWood, woodrad+1);
-					conquest(enemyWoodBorder, woodrad+1);
-					conquest(allEnemy, woodrad+1);		
+					conquest(enemyWood, woodrad+2);
+					conquest(enemyWoodBorder, woodrad+2);
+					conquest(allEnemy, woodrad+2);		
 			
 					wn.sort(function(a,b){return b[4]-a[4]}); 
 			  }
@@ -972,25 +979,11 @@ connection.on("ReceiveBotState", gameState => {
 		   }
 		
 	
-		if(needwood>0&&woodsup>0&&ma>0){
-			  //conquest nearest enemy wood
-				console.log("Initiating Basic Territory with "+ma+" units");
+		//Last little present, if woodsup < = 0, reserve 50 000 units for endgamefood, **Though they will probably go naturally just send units to all bases evenly ending on a 9...   
+			//Should end it total blackout... 
+			  
+			  
 		
-					wn.sort(function(a,b){return a[8]-b[8]});
-					//sort according to distance on enemy arrays... //lets try doubletapping enemy wood anyways, try and block takebacks. 
-					
-					//Try and send 5 units to every enemy wood as well as 5 units to every own wood
-					
-					
-					wn.sort(function(a,b){return b[4]-a[4]}); 
-			  }
-	
-		
-		
-		
-	
-		
-	
 		if(r%10==1){console.log("Population: "+mp);}
 	
 	if(r==2499){console.log("End Population:"+mp+" heatreq "+heatreq+" Unused Units: "+tunits);}
@@ -1168,6 +1161,8 @@ function calcScore(ti){
 	return tp;
 }	
 
+
+
 function conquest(target, range){
 			for(i=0;i<target.length;i++){if(target[i][7]>range||(r+target[i][7])%10!=9){continue;}
 				radical = Math.floor(1 + 10/(target[i][7] + 0.01));
@@ -1177,7 +1172,6 @@ function conquest(target, range){
 				if(target[i][4]+target[i][8]>=nu){nu=nu-(target[i][4]+target[i][8]);}
 				
 				if(nu<=ma&&nu>0&&nu<10){m.actions.push({"type" : 11,"units" : nu,"id" : target[i][2]});ma=ma-nu; 
-								 //console.log("Try and Take: "+JSON.stringify(target[i])+" with "+nu+" units");
 									
 							   }
 				}

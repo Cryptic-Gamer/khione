@@ -925,7 +925,7 @@ connection.on("ReceiveBotState", gameState => {
 			
 	
 		//Cant really do this too early and it will really disrupt others
-		if(needwood>0&&woodsup>0){
+		if(needwood>0&&woodsup>0&&ma>0){
 			  //conquest nearest enemy wood
 				console.log("Initiating Basic Territory with "+ma+" units");
 		
@@ -934,8 +934,8 @@ connection.on("ReceiveBotState", gameState => {
 
 					conquest(enemyWood, woodrad+1);
 					conquest(enemyWoodBorder, woodrad+1);
-					conquest(allEnemy, woodrad+1);
-					
+					conquest(allEnemy, woodrad+1);		
+			
 					wn.sort(function(a,b){return b[4]-a[4]}); 
 			  }
 	
@@ -970,6 +970,23 @@ connection.on("ReceiveBotState", gameState => {
 			cut();
 			
 		   }
+		
+	
+		if(needwood>0&&woodsup>0&&ma>0){
+			  //conquest nearest enemy wood
+				console.log("Initiating Basic Territory with "+ma+" units");
+		
+					wn.sort(function(a,b){return a[8]-b[8]});
+					//sort according to distance on enemy arrays... //lets try doubletapping enemy wood anyways, try and block takebacks. 
+					
+					//Try and send 5 units to every enemy wood as well as 5 units to every own wood
+					
+					
+					wn.sort(function(a,b){return b[4]-a[4]}); 
+			  }
+	
+		
+		
 		
 	
 		
@@ -1152,7 +1169,7 @@ function calcScore(ti){
 }	
 
 function conquest(target, range){
-			for(i=0;i<target.length;i++){if(target[i][7]>range){continue;}
+			for(i=0;i<target.length;i++){if(target[i][7]>range||(r+target[i][7])%10!=9){continue;}
 				radical = Math.floor(1 + 10/(target[i][7] + 0.01));
 				nu=Math.ceil(((target[i][5]+1)/radical)-1);
 				if(nu==0){nu=1;}
@@ -1165,25 +1182,6 @@ function conquest(target, range){
 							   }
 				}
 		}	
-
-function judgement(units){
-	t1=enemyWood.length+ownWood.length;
-	console.log("Judgement "+units+" units to "+t1+" bases");
-	t1=Math.floor(t1/units);
-	if(t1>mp/100){t1=Math.floor(mp/100);}
-	
-	for(i=0;i<enemyWood.length;i++){m.actions.push({"type" : 11,"units" : units,"id" : enemyWood[i][2]});}
-	for(i=0;i<ownWood.length;i++){m.actions.push({"type" : 11,"units" : units,"id" : ownWood[i][2]});}
-}
-
-function salvation(units) {
-	t1=ownWood.length;
-	console.log("Salvation "+units+" units to "+t1+" bases");
-	t1=Math.floor(t1/units);
-	if(t1>mp/100){t1=Math.floor(mp/100);}
-	
-	for(i=0;i<ownWood.length;i++){m.actions.push({"type" : 11,"units" : units,"id" : ownWood[i][2]});}
-}
 
 function retreat(){
 	for(i=allSelf.length-1;i>=0;i--){if(allSelf[i][4]>0&&ma>0){m.actions.push({"type" : 12,"units" : 1,"id" : allSelf[i][2]});ma--;}}

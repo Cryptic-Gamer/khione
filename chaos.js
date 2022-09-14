@@ -939,9 +939,9 @@ connection.on("ReceiveBotState", gameState => {
 					wn.sort(function(a,b){return a[8]-b[8]});
 					//sort according to distance on enemy arrays...
 
-					conquest(enemyWood, woodrad+2);
-					conquest(enemyWoodBorder, woodrad+2);
-					conquest(allEnemy, woodrad+2);		
+					conquest(enemyWood, woodrad+1);
+					conquest(enemyWoodBorder, woodrad+1);
+					conquest(allEnemy, woodrad+1);		
 			
 					wn.sort(function(a,b){return b[4]-a[4]}); 
 			  }

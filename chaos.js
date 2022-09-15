@@ -932,7 +932,7 @@ connection.on("ReceiveBotState", gameState => {
 			
 	
 		//Cant really do this too early and it will really disrupt others
-		if(woodsup>0&&ma>0){
+		if(ma>0){
 			  //conquest nearest enemy wood
 				console.log("Initiating Basic Territory with "+ma+" units");
 		
